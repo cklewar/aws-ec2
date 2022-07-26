@@ -1,0 +1,98 @@
+variable "aws_region" {
+  type    = string
+  default = "us-east-1"
+}
+
+variable "aws_az" {
+  type    = string
+  default = "us-east-1a"
+}
+
+locals {
+  aws_ec2_instance_userdata_template = "${path.module}/templates/instance.tftpl"
+  aws_ec2_instance_userdata_file     = "${path.module}/_out/instance.sh"
+}
+
+module "aws_vpc" {
+  source             = "./modules/aws/vpc"
+  aws_region         = var.aws_region
+  aws_az_name        = var.aws_az
+  aws_vpc_cidr_block = "172.16.192.0/21"
+  aws_vpc_name       = "ck-aws-ec2-test-vpc"
+  custom_tags        = {
+    Name  = "ck-aws-ec2-test-vpc"
+    Owner = "c.klewar@f5.com"
+  }
+}
+
+provider "aws" {
+  region = var.aws_region
+  alias  = "default"
+}
+
+module "aws_subnets" {
+  source          = "./modules/aws/subnet"
+  aws_vpc_id      = module.aws_vpc.aws_vpc_id
+  aws_vpc_subnets = [
+    {
+      map_public_ip_on_launch = true
+      cidr_block              = "172.16.192.0/24"
+      availability_zone       = var.aws_az
+      custom_tags             = {
+        Name  = "ck-aws-ec2-test-public-subnet"
+        Owner = "c.klewar@f5.com"
+      }
+    },
+    {
+      map_public_ip_on_launch = false
+      cidr_block              = "172.16.193.0/24"
+      availability_zone       = var.aws_az
+      custom_tags             = {
+        Name  = "ck-aws-ec2-test-private-subnet"
+        Owner = "c.klewar@f5.com"
+      }
+    }
+  ]
+
+  custom_tags = {
+    Owner = "c.klewar@f5.com"
+  }
+
+  providers = {
+    aws = aws.default
+  }
+}
+
+output "aws_subnet_ids" {
+  value = [for s in module.aws_subnets.aws_subnet_id : s]
+}
+
+module "ec2" {
+  source                    = "./modules/aws/ec2"
+  aws_ec2_instance_name     = "ck-ec2-instance-01"
+  aws_ec2_instance_type     = "t2.small"
+  aws_ec2_public_ips        = ["172.16.192.10"]
+  aws_ec2_private_ips       = ["172.16.193.10"]
+  aws_ec2_instance_data_key = "ck-ec2-instance-01"
+  aws_ec2_instance_data     = {
+    inline = [
+      format("chmod +x /tmp/%s", local.aws_ec2_instance_userdata_file),
+      format("sudo /tmp/%s", local.aws_ec2_instance_userdata_file)
+    ]
+    userdata = {
+    }
+  }
+  aws_ec2_instance_userdata_template = local.aws_ec2_instance_userdata_template
+  aws_ec2_instance_userdata_file     = local.aws_ec2_instance_userdata_file
+  aws_subnet_private_id              = element([for s in module.aws_subnets.aws_subnet_id : s], 1)
+  aws_subnet_public_id               = element([for s in module.aws_subnets.aws_subnet_id : s], 0)
+  aws_az_name                        = var.aws_az
+  aws_region                         = var.aws_region
+  ssh_key                            = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC9x4/A8PvLyNLhlUKJ2hrY5IDV91hh59wkIQsbPCbhUFKcQVY0IjGhJKUJ1W/1Bfu7bteuMvPluMMSE7mxySuat+1vX0Bqo/4aqnqvyWBWBI6/ErVgB3BFZlqNaGkYnH4mgQJRG3W2tmMKweAWKthgYYJUtp+j3huXzoUumVte5d2wbCuUrWETfoAsyA6gVoF7i6cniOBaPnxhKZ8bLUbCA6D1YV29SMWyYbo+5A7gxLYdXfQ/RJRE8FdHJZVuUV8/cN8QlyLz2iFWk4u/CcOWqJ7+pwDiijuvBhmdFpTKxmmWaOH5jSvuFMdSrJZT4QY1BRK+vZndCwpUZJQtLw4QNedUmzH4OS4Z9FY0gAkgqVv1W+wcnEcJOfXyQkXZHyie8zvNDye3fMRVG8yqq/5UT/7eUJlBBGBy1inDzwJ4xzxiz63H++knbcpK+5rXHydgZMQy57Wcd3kxWZX04/C1gCOZkA9wV/XxkFeMybBArpbFoRg7SPdsQpD7snbTOFijaawYSpMHYqs4PUYl21nlgRvs9a3wAdlFrRgSuXRJ5u17a7wBzbUIB6WNPW8L0Z0fUvdog+GHOrTRIeYChqVsBtngpwJhqusXR+6nmH4FNfNB4mFd1GLhio2rpFjuTyyfxb6FeuOAzMAgwAy4oe55UqJ3r6+/IAN2qh8TAkV4hQ== 20220714_ec2_instance"
+  aws_vpc_id                         = module.aws_vpc.aws_vpc_id
+  custom_tags                        = {
+    Name    = "ck-ec2-instance-01"
+    Version = "1"
+    Owner   = "c.klewar@f5.com"
+  }
+}

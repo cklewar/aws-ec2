@@ -13,22 +13,22 @@ variable "aws_ec2_instance_userdata_dir_name" {
   default = "userdata"
 }
 
-variable "aws_ec2_instance_userdata_file_name" {
+variable "aws_ec2_instance_script_file_name" {
   type    = string
   default = "gitea.sh"
 }
 
-variable "aws_ec2_instance_userdata_template_name" {
+variable "aws_ec2_instance_script_template_file_name" {
   type    = string
   default = "gitea.tftpl"
 }
 
-output "template_file" {
-  value = abspath("templates/${var.aws_ec2_instance_userdata_template_name}")
+output "script_template_file" {
+  value = abspath("templates/${var.aws_ec2_instance_script_template_file_name}")
 }
 
-output "userdata_file" {
-  value = abspath("_out/${var.aws_ec2_instance_userdata_file_name}")
+output "rendered_script_file" {
+  value = abspath("_out/${var.aws_ec2_instance_script_file_name}")
 }
 
 module "aws_vpc" {
@@ -57,7 +57,7 @@ module "aws_subnets" {
       cidr_block              = "172.16.192.0/24"
       availability_zone       = var.aws_az
       custom_tags             = {
-        Name  = "ck-aws-ec2-test-public-subnet"
+        Name  = "aws-ec2-test-public-subnet"
         Owner = "c.klewar@f5.com"
       }
     },
@@ -66,7 +66,7 @@ module "aws_subnets" {
       cidr_block              = "172.16.193.0/24"
       availability_zone       = var.aws_az
       custom_tags             = {
-        Name  = "ck-aws-ec2-test-private-subnet"
+        Name  = "aws-ec2-test-private-subnet"
         Owner = "c.klewar@f5.com"
       }
     }
@@ -81,43 +81,62 @@ module "aws_subnets" {
   }
 }
 
-output "aws_subnet_ids" {
-  value = [for s in module.aws_subnets.aws_subnet_id : s]
+variable "gitea_version" {
+  type = string
+}
+
+variable "gitea_password" {
+  tpye = string
 }
 
 module "ec2" {
-  source                    = "./modules/aws/ec2"
-  aws_ec2_instance_name     = "ck-ec2-instance-01"
-  aws_ec2_instance_type     = "t2.small"
-  aws_ec2_public_ips        = ["172.16.192.10"]
-  aws_ec2_private_ips       = ["172.16.193.10"]
-  aws_ec2_instance_data_key = "ck-ec2-instance-01"
-  aws_ec2_instance_data     = {
+  source                        = "./modules/aws/ec2"
+  aws_ec2_instance_name         = "ck-ec2-instance-01"
+  aws_ec2_instance_type         = "t2.small"
+  aws_subnet_cidr               = "172.16.192.0/21"
+  aws_ec2_public_interface_ips  = ["172.16.192.10"]
+  aws_ec2_private_interface_ips = ["172.16.193.10"]
+  aws_ec2_instance_data_key     = "ec2-instance-01"
+  aws_ec2_instance_data         = {
     inline = [
-      format("chmod +x /tmp/%s", var.aws_ec2_instance_userdata_file_name),
-      format("sudo /tmp/%s", var.aws_ec2_instance_userdata_file_name)
+      format("chmod +x /tmp/%s", var.aws_ec2_instance_script_file_name),
+      format("sudo /tmp/%s", var.aws_ec2_instance_script_file_name)
     ]
     userdata = {
-      GITEA_VERSION = "1.16.9"
-      GITEA_PASSWORD = "Volterra123!"
+      GITEA_VERSION  = var.gitea_version
+      GITEA_PASSWORD = var.gitea_password
     }
   }
-  aws_ec2_instance_userdata_file_name = var.aws_ec2_instance_userdata_file_name
-  aws_ec2_instance_userdata_template  = abspath("templates/${var.aws_ec2_instance_userdata_template_name}")
-  aws_ec2_instance_userdata_file      = abspath("_out/${var.aws_ec2_instance_userdata_file_name}")
-  aws_ec2_instance_userdata_dir       = abspath(var.aws_ec2_instance_userdata_dir_name)
-  aws_subnet_private_id               = element([for s in module.aws_subnets.aws_subnet_id : s], 1)
-  aws_subnet_public_id                = element([for s in module.aws_subnets.aws_subnet_id : s], 0)
-  aws_az_name                         = var.aws_az
-  aws_region                          = var.aws_region
-  ssh_private_key_file                = abspath("keys/key")
-  ssh_public_key_file                 = abspath("keys/key.pub")
-  aws_vpc_id                          = module.aws_vpc.aws_vpc_id
-  custom_tags                         = {
-    Name    = "ck-ec2-instance-01"
+  aws_ec2_instance_script_template = format("%s.tftpl", var.aws_ec2_instance_script_template_file_name)
+  aws_ec2_instance_script_file     = format("%s.sh", var.aws_ec2_instance_script_file_name)
+  aws_subnet_private_id            = element([for s in module.aws_subnets.aws_subnet_id : s], 1)
+  aws_subnet_public_id             = element([for s in module.aws_subnets.aws_subnet_id : s], 0)
+  aws_az_name                      = var.aws_az
+  aws_region                       = var.aws_region
+  ssh_private_key_file             = abspath("keys/key")
+  ssh_public_key_file              = abspath("keys/key.pub")
+  aws_vpc_id                       = module.aws_vpc.aws_vpc_id
+  aws_ec2_instance_userdata_dirs   = [
+    {
+      name        = "instance_script"
+      source      = abspath(format("../modules/ec2/_out/%s", format("%s.sh", var.aws_ec2_instance_script_file_name)))
+      destination = format("/tmp/%s", format("%s.sh", var.aws_ec2_instance_script_file_name))
+    },
+    {
+      name        = "additional_custom_data"
+      source      = abspath(format("../modules/ec2/userdata/%s", var.aws_ec2_instance_script_file_name))
+      destination = "/tmp/userdata"
+    }
+  ]
+  custom_tags = {
+    Name    = "ec2-instance-01"
     Version = "1"
     Owner   = "c.klewar@f5.com"
   }
+}
+
+output "aws_subnet_ids" {
+  value = [for s in module.aws_subnets.aws_subnet_id : s]
 }
 
 output "aws_ec2_instance_public_ip" {

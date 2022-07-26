@@ -4,10 +4,8 @@ This repository consists of Terraform templates to bring up a AWS EC2 instance w
 
 ## Usage
 
-- Clone this repo with: `git clone https://github.com/cklewar/aws-ec2`
+- Clone this repo with: `git clone --recurse-submodules https://github.com/cklewar/aws-ec2`
 - Enter repository directory with: `cd aws-ec2`
-- Clone __modules__ repository with: `git clone https://github.com/cklewar/f5-xc-modules`
-- Rename __modules__ repository directory name with: `mv f5-xc-modules modules`
 - Export AWS `access_key` and `aws_secrect_key` environment variables
 - Pick and choose from below examples and add mandatory input data and copy data into file `main.tf.example`
 - Rename file __main.tf.example__ to __main.tf__ with: `rename main.tf.example main.tf`

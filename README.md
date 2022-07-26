@@ -20,7 +20,7 @@ This repository consists of Terraform templates to bring up a AWS EC2 instance w
 ## AWS EC2 example with Gitea
 
 ````hcl
-vvariable "aws_region" {
+variable "aws_region" {
   type    = string
   default = "us-west-1"
 }
@@ -121,6 +121,7 @@ module "ec2" {
     ]
     userdata = {
       GITEA_VERSION = "1.16.9"
+      GITEA_PASSWORD = "Volterra123!"
     }
   }
   aws_ec2_instance_userdata_file_name = var.aws_ec2_instance_userdata_file_name

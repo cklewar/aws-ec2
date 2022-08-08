@@ -36,9 +36,9 @@ module "aws_vpc" {
   aws_region         = var.aws_region
   aws_az_name        = var.aws_az
   aws_vpc_cidr_block = "172.16.192.0/21"
-  aws_vpc_name       = "ck-aws-ec2-test-vpc"
+  aws_vpc_name       = "aws-ec2-test-vpc"
   custom_tags        = {
-    Name  = "ck-aws-ec2-test-vpc"
+    Name  = "aws-ec2-test-vpc"
     Owner = "c.klewar@f5.com"
   }
 }
@@ -91,7 +91,7 @@ variable "gitea_password" {
 
 module "ec2" {
   source                        = "./modules/aws/ec2"
-  aws_ec2_instance_name         = "ck-ec2-instance-01"
+  aws_ec2_instance_name         = "ec2-instance-01"
   aws_ec2_instance_type         = "t2.small"
   aws_subnet_cidr               = "172.16.192.0/21"
   aws_ec2_public_interface_ips  = ["172.16.192.10"]

@@ -86,7 +86,7 @@ variable "gitea_version" {
 }
 
 variable "gitea_password" {
-  tpye = string
+  type = string
 }
 
 module "ec2" {
@@ -107,8 +107,8 @@ module "ec2" {
       GITEA_PASSWORD = var.gitea_password
     }
   }
-  aws_ec2_instance_script_template = format("%s.tftpl", var.aws_ec2_instance_script_template_file_name)
-  aws_ec2_instance_script_file     = format("%s.sh", var.aws_ec2_instance_script_file_name)
+  aws_ec2_instance_script_template = format("%s", var.aws_ec2_instance_script_template_file_name)
+  aws_ec2_instance_script_file     = format("%s", var.aws_ec2_instance_script_file_name)
   aws_subnet_private_id            = element([for s in module.aws_subnets.aws_subnet_id : s], 1)
   aws_subnet_public_id             = element([for s in module.aws_subnets.aws_subnet_id : s], 0)
   aws_az_name                      = var.aws_az

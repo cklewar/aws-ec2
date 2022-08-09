@@ -1,0 +1,48 @@
+name: F5XC AWS EC2 module
+on: push
+jobs:
+  f5-xc-aws-ec2-module-test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "The job was automatically triggered by a ${{ github.event_name }} event."
+      - run: echo "This job is now running on a ${{ runner.os }} server hosted by GitHub."
+      - run: echo "The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
+      - name: Check out repository and submodules
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - run: echo "The ${{ github.repository }} repository has been cloned to the runner."
+      - name: List files in the repository
+        run: |
+          ls ${{ github.workspace }}
+      - name: Setup environment
+        id: setup_env
+        run: |
+          cp main.tf.example main.tf
+      - name: Setup Terraform
+        id: setup_tf
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_wrapper: false
+      - name: Terraform fmt
+        id: fmt
+        run: terraform fmt -check
+        continue-on-error: true
+      - name: Terraform Init
+        id: init
+        run: terraform init
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate -no-color
+      - name: Terraform Plan
+        id: plan
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: terraform plan -no-color
+        continue-on-error: false
+      - name: Cleanup environment
+        id: cleanup_env
+        run: |
+          rm main.tf
+      - run: echo "This job's status is ${{ job.status }}."

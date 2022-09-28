@@ -126,7 +126,6 @@ module "ec2" {
   source                        = "./modules/aws/ec2"
   aws_ec2_instance_name         = var.aws_ec2_instance_name
   aws_ec2_instance_type         = "t2.small"
-  aws_subnet_cidr               = "172.16.192.0/21"
   aws_ec2_public_interface_ips  = ["172.16.192.10"]
   aws_ec2_private_interface_ips = ["172.16.193.10"]
   aws_ec2_instance_script       = {

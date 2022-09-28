@@ -11,8 +11,8 @@ sudo apt-get -y install git sqlite3 xz-utils curl net-tools tcpdump traceroute i
 wget https://dl.gitea.io/gitea/${GITEA_VERSION}/gitea-${GITEA_VERSION}-linux-amd64.xz -P /tmp
 wget https://dl.gitea.io/gitea/${GITEA_VERSION}/gitea-${GITEA_VERSION}-linux-amd64.xz.asc -P /tmp
 gpg --keyserver keys.openpgp.org --recv 7C9E68152594688862D62AF62D9AE806EC1592E2
-gpg --verify /tmp/gitea-1.16.9-linux-amd64.xz.asc /tmp/gitea-1.16.9-linux-amd64.xz
-xz --decompress /tmp/gitea-1.16.9-linux-amd64.xz
+gpg --verify /tmp/gitea-${GITEA_VERSION}-linux-amd64.xz.asc /tmp/gitea-${GITEA_VERSION}-linux-amd64.xz
+xz --decompress /tmp/gitea-${GITEA_VERSION}-linux-amd64.xz
 sudo adduser \
     --system \
     --shell /bin/bash \
@@ -31,18 +31,22 @@ sudo chown root:git /etc/gitea
 sudo chmod 770 /etc/gitea
 sudo mkdir -p /var/lib/gitea/custom/conf
 export GITEA_CUSTOM=/var/lib/gitea/custom/
-sudo cp /tmp/userdata/app.ini /var/lib/gitea/custom/conf/app.ini
+export GITEA_WORK_DIR=/var/lib/gitea/
+sudo cp /tmp/custom_data/app.ini /var/lib/gitea/custom/conf/app.ini
 sudo chown git:git /var/lib/gitea/custom/conf
 sudo chown git:git /var/lib/gitea/custom/conf/app.ini
 sudo chmod 750 /var/lib/gitea/custom/conf
-sudo chmod 640 /var/lib/gitea/custom/conf/app.ini
+# sudo chmod 640 /var/lib/gitea/custom/conf/app.ini
 sudo ln -s /var/lib/gitea/custom/conf/app.ini /etc/gitea/app.ini
 sudo chown root:git /etc/gitea/app.ini
 sudo chmod 750 /etc/gitea
 sudo chmod 640 /etc/gitea/app.ini
 sudo wget https://raw.githubusercontent.com/go-gitea/gitea/main/contrib/systemd/gitea.service -P /etc/systemd/system/
+sudo chown git:git /var/lib/gitea/custom/conf/app.ini
+sudo chmod 777 /var/lib/gitea/custom/conf/app.ini
 sudo systemctl daemon-reload && sudo systemctl enable --now gitea
 sleep 5
+sudo chmod 640 /var/lib/gitea/custom/conf/app.ini
 sudo -u git gitea admin user create --username gitea --password ${GITEA_PASSWORD} --email gitea@example.com -c /var/lib/gitea/custom/conf/app.ini
 sudo -u git gitea generate secret INTERNAL_TOKEN -c /var/lib/gitea/custom/conf/app.ini
 sudo -u git gitea generate secret JWT_SECRET -c /var/lib/gitea/custom/conf/app.ini
@@ -56,7 +60,7 @@ curl -k -X POST \
   	"name":"awaf",
   	"auto_init": true
   }'
-CONTENT=$(cat /tmp/userdata/waf_policy.json | base64)
+CONTENT=$(cat /tmp/${CUSTOM_DATA_DIR}/waf_policy.json | base64)
 JSON_FMT='{"author": {"email": "gitea@example.com", "name": "gitea"}, "branch": "master", "committer": {"email": "gitea@example.com", "name": "gitea"}, "content": "%s", "message": "Initial commit of AWAF Policy"}'
 PAYLOAD=$(printf "$JSON_FMT" "$CONTENT")
 curl -X 'POST' \

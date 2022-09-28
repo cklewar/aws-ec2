@@ -1,10 +1,17 @@
 terraform {
-  required_version = ">= 1.2.4"
+  required_version = ">= 1.3.0"
+  cloud {
+    organization = "cklewar"
+
+    workspaces {
+      name = "aws-ec2-module"
+    }
+  }
 
   required_providers {
-    volterra = {
-      source  = "volterraedge/volterra"
-      version = ">= 0.11.9"
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 4.32.0"
     }
 
     local = ">= 2.2.3"

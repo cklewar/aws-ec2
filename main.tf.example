@@ -50,7 +50,7 @@ provider "aws" {
 
 module "aws_subnets" {
   source          = "./modules/aws/subnet"
-  aws_vpc_id      = module.aws_vpc.aws_vpc_id
+  aws_vpc_id      = module.aws_vpc.aws_vpc["id"]
   aws_vpc_subnets = [
     {
       map_public_ip_on_launch = true
@@ -109,13 +109,13 @@ module "ec2" {
   }
   aws_ec2_instance_script_template = format("%s", var.aws_ec2_instance_script_template_file_name)
   aws_ec2_instance_script_file     = format("%s", var.aws_ec2_instance_script_file_name)
-  aws_subnet_private_id            = element([for s in module.aws_subnets.aws_subnet_id : s], 1)
-  aws_subnet_public_id             = element([for s in module.aws_subnets.aws_subnet_id : s], 0)
+  aws_subnet_private_id            = element([for s in module.aws_subnets.aws_subnets["id"] : s], 1)
+  aws_subnet_public_id             = element([for s in module.aws_subnets.aws_subnets["id"] : s], 0)
   aws_az_name                      = var.aws_az
   aws_region                       = var.aws_region
   ssh_private_key_file             = abspath("keys/key")
   ssh_public_key_file              = abspath("keys/key.pub")
-  aws_vpc_id                       = module.aws_vpc.aws_vpc_id
+  aws_vpc_id                       = module.aws_vpc.aws_vpc["id"]
   aws_ec2_instance_userdata_dirs   = [
     {
       name        = "instance_script"
@@ -136,7 +136,7 @@ module "ec2" {
 }
 
 output "aws_subnet_ids" {
-  value = [for s in module.aws_subnets.aws_subnet_id : s]
+  value = [for s in module.aws_subnets.aws_subnets["id"]: s]
 }
 
 output "aws_ec2_instance_public_ip" {

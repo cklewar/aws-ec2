@@ -94,7 +94,7 @@ jobs:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_TOKEN_APP_TERRAFORM_IO }}
           TF_VAR_gitea_version: ${{ secrets.GITEA_VERSION }}
           TF_VAR_gitea_password: ${{ secrets.GITEA_PASSWORD }}
-          TF_VAR_gitea_lfs_jwt_secret: ${{ secrets.GITEA_LFS_JWT_SECRET }}
+          # TF_VAR_gitea_lfs_jwt_secret: ${{ secrets.GITEA_LFS_JWT_SECRET }}
         run: terraform plan -no-color
         continue-on-error: false
       - name: Cleanup environment
@@ -150,7 +150,7 @@ jobs:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_TOKEN_APP_TERRAFORM_IO }}
           TF_VAR_gitea_version: ${{ secrets.GITEA_VERSION }}
           TF_VAR_gitea_password: ${{ secrets.GITEA_PASSWORD }}
-          TF_VAR_gitea_lfs_jwt_secret: ${{ secrets.GITEA_LFS_JWT_SECRET }}
+          # TF_VAR_gitea_lfs_jwt_secret: ${{ secrets.GITEA_LFS_JWT_SECRET }}
         run: terraform apply -auto-approve -no-color
         continue-on-error: false
       - name: Cleanup environment
@@ -206,7 +206,7 @@ jobs:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_TOKEN_APP_TERRAFORM_IO }}
           TF_VAR_gitea_version: ${{ secrets.GITEA_VERSION }}
           TF_VAR_gitea_password: ${{ secrets.GITEA_PASSWORD }}
-          TF_VAR_gitea_lfs_jwt_secret: ${{ secrets.GITEA_LFS_JWT_SECRET }}
+          # TF_VAR_gitea_lfs_jwt_secret: ${{ secrets.GITEA_LFS_JWT_SECRET }}
         run: terraform destroy -auto-approve -no-color
         continue-on-error: false
       - name: Cleanup environment

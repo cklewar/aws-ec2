@@ -31,18 +31,22 @@ sudo chown root:git /etc/gitea
 sudo chmod 770 /etc/gitea
 sudo mkdir -p /var/lib/gitea/custom/conf
 export GITEA_CUSTOM=/var/lib/gitea/custom/
+export GITEA_WORK_DIR=/var/lib/gitea/
 sudo cp /tmp/custom_data/app.ini /var/lib/gitea/custom/conf/app.ini
 sudo chown git:git /var/lib/gitea/custom/conf
 sudo chown git:git /var/lib/gitea/custom/conf/app.ini
 sudo chmod 750 /var/lib/gitea/custom/conf
-sudo chmod 640 /var/lib/gitea/custom/conf/app.ini
+# sudo chmod 640 /var/lib/gitea/custom/conf/app.ini
 sudo ln -s /var/lib/gitea/custom/conf/app.ini /etc/gitea/app.ini
 sudo chown root:git /etc/gitea/app.ini
 sudo chmod 750 /etc/gitea
 sudo chmod 640 /etc/gitea/app.ini
 sudo wget https://raw.githubusercontent.com/go-gitea/gitea/main/contrib/systemd/gitea.service -P /etc/systemd/system/
+sudo chown git:git /var/lib/gitea/custom/conf/app.ini
+sudo chmod 777 /var/lib/gitea/custom/conf/app.ini
 sudo systemctl daemon-reload && sudo systemctl enable --now gitea
 sleep 5
+sudo chmod 640 /var/lib/gitea/custom/conf/app.ini
 sudo -u git gitea admin user create --username gitea --password ${GITEA_PASSWORD} --email gitea@example.com -c /var/lib/gitea/custom/conf/app.ini
 sudo -u git gitea generate secret INTERNAL_TOKEN -c /var/lib/gitea/custom/conf/app.ini
 sudo -u git gitea generate secret JWT_SECRET -c /var/lib/gitea/custom/conf/app.ini

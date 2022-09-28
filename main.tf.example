@@ -31,6 +31,16 @@ variable "rendered_template_output_path" {
   default = "_out/"
 }
 
+variable "custom_data_dir" {
+  type    = string
+  default = "custom_data"
+}
+
+variable "aws_ec2_instance_name" {
+  type    = string
+  default = "ec2-instance-01"
+}
+
 locals {
   rendered_template_output_path = abspath("_out/")
 }
@@ -114,22 +124,22 @@ resource "aws_route_table_association" "subnet" {
 
 module "ec2" {
   source                        = "./modules/aws/ec2"
-  aws_ec2_instance_name         = "ec2-instance-01"
+  aws_ec2_instance_name         = var.aws_ec2_instance_name
   aws_ec2_instance_type         = "t2.small"
   aws_subnet_cidr               = "172.16.192.0/21"
   aws_ec2_public_interface_ips  = ["172.16.192.10"]
   aws_ec2_private_interface_ips = ["172.16.193.10"]
   aws_ec2_instance_script       = {
     actions = [
-      "mkdir /tmp/custom_data",
       "ls -la /tmp",
-      "ls -la /tmp/custom_data",
+      "ls -la /tmp/${var.custom_data_dir}",
       format("chmod +x /tmp/%s", var.aws_ec2_instance_script_file_name),
       format("sudo /tmp/%s", var.aws_ec2_instance_script_file_name)
     ]
     template_data = {
-      GITEA_VERSION  = var.gitea_version
-      GITEA_PASSWORD = var.gitea_password
+      CUSTOM_DATA_DIR = var.custom_data_dir
+      GITEA_VERSION   = var.gitea_version
+      GITEA_PASSWORD  = var.gitea_password
     }
   }
   aws_ec2_instance_script_template  = var.aws_ec2_instance_script_template_file_name
@@ -149,18 +159,13 @@ module "ec2" {
       destination = format("/tmp/%s", var.aws_ec2_instance_script_file_name)
     },
     {
-      name        = "additional_custom_data_gitea"
-      source      = abspath(format("custom_data/%s", "app.ini"))
-      destination = "/tmp/custom_data/app.ini"
-    },
-    {
-      name        = "additional_custom_data_waf"
-      source      = abspath(format("custom_data/%s", "waf_policy.json"))
-      destination = "/tmp/custom_data/waf_policy.json"
+      name        = "additional_custom_data"
+      source      = abspath("${var.custom_data_dir}/")
+      destination = "/tmp"
     }
   ]
   custom_tags = {
-    Name    = "ec2-instance-01"
+    Name    = var.aws_ec2_instance_name
     Version = "1"
     Owner   = "c.klewar@f5.com"
   }

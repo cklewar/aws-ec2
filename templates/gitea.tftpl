@@ -31,7 +31,7 @@ sudo chown root:git /etc/gitea
 sudo chmod 770 /etc/gitea
 sudo mkdir -p /var/lib/gitea/custom/conf
 export GITEA_CUSTOM=/var/lib/gitea/custom/
-sudo cp /tmp/userdata/app.ini /var/lib/gitea/custom/conf/app.ini
+sudo cp /tmp/custom_data/app.ini /var/lib/gitea/custom/conf/app.ini
 sudo chown git:git /var/lib/gitea/custom/conf
 sudo chown git:git /var/lib/gitea/custom/conf/app.ini
 sudo chmod 750 /var/lib/gitea/custom/conf
@@ -56,7 +56,7 @@ curl -k -X POST \
   	"name":"awaf",
   	"auto_init": true
   }'
-CONTENT=$(cat /tmp/userdata/waf_policy.json | base64)
+CONTENT=$(cat /tmp/${CUSTOM_DATA_DIR}/waf_policy.json | base64)
 JSON_FMT='{"author": {"email": "gitea@example.com", "name": "gitea"}, "branch": "master", "committer": {"email": "gitea@example.com", "name": "gitea"}, "content": "%s", "message": "Initial commit of AWAF Policy"}'
 PAYLOAD=$(printf "$JSON_FMT" "$CONTENT")
 curl -X 'POST' \

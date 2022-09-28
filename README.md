@@ -33,7 +33,7 @@ variable "aws_az" {
 
 variable "aws_ec2_instance_userdata_dir_name" {
   type    = string
-  default = "userdata"
+  default = "custom_data"
 }
 
 variable "aws_ec2_instance_script_file_name" {
@@ -147,8 +147,8 @@ module "ec2" {
     },
     {
       name        = "additional_custom_data"
-      source      = abspath(format("../modules/ec2/userdata/%s", var.aws_ec2_instance_script_file_name))
-      destination = "/tmp/userdata"
+      source      = abspath(format("../modules/ec2/custom_data/%s", var.aws_ec2_instance_script_file_name))
+      destination = "/tmp/custom_data"
     }
   ]
   custom_tags = {

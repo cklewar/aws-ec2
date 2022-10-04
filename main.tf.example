@@ -20,6 +20,7 @@ variable "aws_ec2_instance_script_template_file_name" {
 
 variable "gitea_version" {
   type    = string
+  default = "1.17.2"
 }
 
 variable "gitea_password" {

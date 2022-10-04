@@ -20,7 +20,6 @@ variable "aws_ec2_instance_script_template_file_name" {
 
 variable "gitea_version" {
   type    = string
-  default = "1.17.2"
 }
 
 variable "gitea_password" {
@@ -43,7 +42,8 @@ variable "aws_ec2_instance_name" {
 }
 
 locals {
-  rendered_template_output_path = abspath("_out/")
+  template_output_dir_path = abspath("_out/")
+  template_input_dir_path  = abspath("templates/")
 }
 
 module "aws_vpc" {
@@ -151,11 +151,12 @@ module "ec2" {
   ssh_private_key_file              = abspath("keys/key")
   ssh_public_key_file               = abspath("keys/key.pub")
   aws_vpc_id                        = module.aws_vpc.aws_vpc["id"]
-  rendered_template_output_path     = local.rendered_template_output_path
+  template_output_dir_path          = local.template_output_dir_path
+  template_input_dir_path           = local.template_input_dir_path
   aws_ec2_instance_custom_data_dirs = [
     {
       name        = "instance_script"
-      source      = "${local.rendered_template_output_path}/${var.aws_ec2_instance_script_file_name}"
+      source      = "${local.template_output_dir_path}/${var.aws_ec2_instance_script_file_name}"
       destination = format("/tmp/%s", var.aws_ec2_instance_script_file_name)
     },
     {
@@ -180,7 +181,7 @@ output "script_template_file" {
 }
 
 output "rendered_script_file" {
-  value = "${local.rendered_template_output_path}/${var.aws_ec2_instance_script_file_name}"
+  value = "${local.template_output_dir_path}/${var.aws_ec2_instance_script_file_name}"
 }
 
 output "aws_subnet_ids" {

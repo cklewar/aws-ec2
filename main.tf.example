@@ -53,6 +53,19 @@ variable "aws_ec2_instance_name" {
   default = "ec2-instance-01"
 }
 
+variable "ssh_private_key_file" {
+  type    = string
+}
+
+variable "ssh_public_key_file" {
+  type    = string
+}
+
+variable "f5xc_aws_tgw_workload_subnet" {
+  type    = string
+  default = "192.168.168.0/26"
+}
+
 provider "aws" {
   region = var.aws_region
   alias  = "default"
@@ -88,8 +101,9 @@ module "aws_subnet" {
       cidr_block              = "172.16.192.0/24"
       availability_zone       = var.aws_az
       custom_tags             = {
-        Name  = format("%s-aws-ec2-test-public-subnet-%s", var.project_prefix, var.project_suffix)
-        Owner = "c.klewar@f5.com"
+        Name       = format("%s-aws-ec2-test-public-subnet-%s", var.project_prefix, var.project_suffix)
+        Owner      = "c.klewar@f5.com"
+        create_rta = "false"
       }
     },
     {
@@ -97,8 +111,9 @@ module "aws_subnet" {
       cidr_block              = "172.16.193.0/24"
       availability_zone       = var.aws_az
       custom_tags             = {
-        Name  = format("%s-aws-ec2-test-private-subnet-%s", var.project_prefix, var.project_suffix)
-        Owner = "c.klewar@f5.com"
+        Name       = format("%s-aws-ec2-test-private-subnet-%s", var.project_prefix, var.project_suffix)
+        Owner      = "c.klewar@f5.com"
+        create_rta = "true"
       }
     }
   ]
@@ -134,6 +149,7 @@ resource "aws_route_table" "rt" {
 
 resource "aws_route_table_association" "subnet" {
   provider       = aws.default
+  # for_each       = {for key, value in module.aws_subnet.aws_subnets : key => value if value.tags["create_rta"] == "true"}
   for_each       = module.aws_subnet.aws_subnets
   subnet_id      = each.value.id
   route_table_id = aws_route_table.rt.id
@@ -147,12 +163,14 @@ module "ec2" {
   aws_ec2_private_interface_ips = ["172.16.193.10"]
   aws_ec2_instance_script       = {
     actions = [
-      "ls -la /tmp",
       "ls -la /tmp/${var.custom_data_dir}",
       format("chmod +x /tmp/%s", var.aws_ec2_instance_script_file_name),
       format("sudo /tmp/%s", var.aws_ec2_instance_script_file_name)
     ]
     template_data = {
+      CUSTOM_DATA_DIR = format("%s/vcs", var.custom_data_dir)
+      PREFIX          = var.f5xc_aws_tgw_workload_subnet
+      GATEWAY         = cidrhost(module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-private-subnet-%s", var.project_prefix, var.project_suffix)]["cidr_block"], 1)
       CUSTOM_DATA_DIR = var.custom_data_dir
       GITEA_VERSION   = var.gitea_version
       GITEA_PASSWORD  = var.gitea_password
@@ -160,12 +178,12 @@ module "ec2" {
   }
   aws_ec2_instance_script_template  = var.aws_ec2_instance_script_template_file_name
   aws_ec2_instance_script_file      = var.aws_ec2_instance_script_file_name
-  aws_subnet_private_id             = module.aws_subnet.aws_subnets["aws-ec2-test-private-subnet"]["id"]
-  aws_subnet_public_id              = module.aws_subnet.aws_subnets["aws-ec2-test-public-subnet"]["id"]
+  aws_subnet_private_id             = module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-private-subnet-%s", var.project_prefix, var.project_suffix)]["id"]
+  aws_subnet_public_id              = module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-public-subnet-%s", var.project_prefix, var.project_suffix)]["id"]
   aws_az_name                       = var.aws_az
   aws_region                        = var.aws_region
-  ssh_private_key_file              = abspath("keys/key")
-  ssh_public_key_file               = abspath("keys/key.pub")
+  ssh_private_key_file              = var.ssh_private_key_file
+  ssh_public_key_file               = var.ssh_public_key_file
   aws_vpc_id                        = module.aws_vpc.aws_vpc["id"]
   template_output_dir_path          = local.template_output_dir_path
   template_input_dir_path           = local.template_input_dir_path
@@ -177,7 +195,7 @@ module "ec2" {
     },
     {
       name        = "additional_custom_data"
-      source      = abspath("${var.custom_data_dir}/")
+      source      = abspath("${var.custom_data_dir}")
       destination = "/tmp"
     }
   ]

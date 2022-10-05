@@ -12,15 +12,21 @@ This repository consists of Terraform templates to bring up a AWS EC2 instance w
 - Initialize with: `terraform init`
 - Apply with: `terraform apply -auto-approve` or destroy with: `terraform destroy -auto-approve`
 
-### Example Output
-
-```bash
-
-```
-
 ## AWS EC2 example with Gitea
 
 ````hcl
+variable "project_prefix" {
+  type        = string
+  description = "prefix string put in front of string"
+  default     = "f5xc"
+}
+
+variable "project_suffix" {
+  type        = string
+  description = "prefix string put at the end of string"
+  default     = "01"
+}
+
 variable "aws_region" {
   type    = string
   default = "us-west-1"
@@ -29,11 +35,6 @@ variable "aws_region" {
 variable "aws_az" {
   type    = string
   default = "us-west-1a"
-}
-
-variable "aws_ec2_instance_userdata_dir_name" {
-  type    = string
-  default = "custom_data"
 }
 
 variable "aws_ec2_instance_script_file_name" {
@@ -46,24 +47,40 @@ variable "aws_ec2_instance_script_template_file_name" {
   default = "gitea.tftpl"
 }
 
-output "script_template_file" {
-  value = abspath("templates/${var.aws_ec2_instance_script_template_file_name}")
+variable "gitea_version" {
+  type    = string
 }
 
-output "rendered_script_file" {
-  value = abspath("_out/${var.aws_ec2_instance_script_file_name}")
+variable "gitea_password" {
+  type    = string
 }
 
-module "aws_vpc" {
-  source             = "./modules/aws/vpc"
-  aws_region         = var.aws_region
-  aws_az_name        = var.aws_az
-  aws_vpc_cidr_block = "172.16.192.0/21"
-  aws_vpc_name       = "ck-aws-ec2-test-vpc"
-  custom_tags        = {
-    Name  = "ck-aws-ec2-test-vpc"
-    Owner = "c.klewar@f5.com"
-  }
+variable "rendered_template_output_path" {
+  type    = string
+  default = "_out/"
+}
+
+variable "custom_data_dir" {
+  type    = string
+  default = "custom_data"
+}
+
+variable "aws_ec2_instance_name" {
+  type    = string
+  default = "ec2-instance-01"
+}
+
+variable "ssh_private_key_file" {
+  type    = string
+}
+
+variable "ssh_public_key_file" {
+  type    = string
+}
+
+variable "f5xc_aws_tgw_workload_subnet" {
+  type    = string
+  default = "192.168.168.0/26"
 }
 
 provider "aws" {
@@ -71,17 +88,39 @@ provider "aws" {
   alias  = "default"
 }
 
-module "aws_subnets" {
+locals {
+  template_output_dir_path = abspath("_out/")
+  template_input_dir_path  = abspath("templates/")
+}
+
+module "aws_vpc" {
+  source             = "./modules/aws/vpc"
+  aws_region         = var.aws_region
+  aws_az_name        = var.aws_az
+  aws_vpc_cidr_block = "172.16.192.0/21"
+  aws_vpc_name       = format("%s-aws-ec2-test-vpc-%s", var.project_prefix, var.project_suffix)
+  custom_tags        = {
+    Name  = "aws-ec2-test-vpc"
+    Owner = "c.klewar@f5.com"
+  }
+
+  providers = {
+    aws = aws.default
+  }
+}
+
+module "aws_subnet" {
   source          = "./modules/aws/subnet"
-  aws_vpc_id      = module.aws_vpc.aws_vpc_id
+  aws_vpc_id      = module.aws_vpc.aws_vpc["id"]
   aws_vpc_subnets = [
     {
       map_public_ip_on_launch = true
       cidr_block              = "172.16.192.0/24"
       availability_zone       = var.aws_az
       custom_tags             = {
-        Name  = "aws-ec2-test-public-subnet"
-        Owner = "c.klewar@f5.com"
+        Name       = format("%s-aws-ec2-test-public-subnet-%s", var.project_prefix, var.project_suffix)
+        Owner      = "c.klewar@f5.com"
+        create_rta = "false"
       }
     },
     {
@@ -89,8 +128,9 @@ module "aws_subnets" {
       cidr_block              = "172.16.193.0/24"
       availability_zone       = var.aws_az
       custom_tags             = {
-        Name  = "aws-ec2-test-private-subnet"
-        Owner = "c.klewar@f5.com"
+        Name       = format("%s-aws-ec2-test-private-subnet-%s", var.project_prefix, var.project_suffix)
+        Owner      = "c.klewar@f5.com"
+        create_rta = "true"
       }
     }
   ]
@@ -104,70 +144,103 @@ module "aws_subnets" {
   }
 }
 
-variable "gitea_version" {
-  type = string
+resource "aws_internet_gateway" "igw" {
+  provider = aws.default
+  vpc_id   = module.aws_vpc.aws_vpc["id"]
+  tags     = {
+    Owner = "c.klewar@f5.com"
+  }
 }
 
-variable "gitea_password" {
-  tpye = string
+resource "aws_route_table" "rt" {
+  provider = aws.default
+  vpc_id   = module.aws_vpc.aws_vpc["id"]
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.igw.id
+  }
+  tags = {
+    Owner = "c.klewar@f5.com"
+  }
+}
+
+resource "aws_route_table_association" "subnet" {
+  provider       = aws.default
+  # for_each       = {for key, value in module.aws_subnet.aws_subnets : key => value if value.tags["create_rta"] == "true"}
+  for_each       = module.aws_subnet.aws_subnets
+  subnet_id      = each.value.id
+  route_table_id = aws_route_table.rt.id
 }
 
 module "ec2" {
   source                        = "./modules/aws/ec2"
-  aws_ec2_instance_name         = "ck-ec2-instance-01"
+  aws_ec2_instance_name         = format("%s-%s-%s", var.project_prefix, var.aws_ec2_instance_name, var.project_suffix)
   aws_ec2_instance_type         = "t2.small"
-  aws_subnet_cidr               = "172.16.192.0/21"
   aws_ec2_public_interface_ips  = ["172.16.192.10"]
   aws_ec2_private_interface_ips = ["172.16.193.10"]
-  aws_ec2_instance_data_key     = "ec2-instance-01"
-  aws_ec2_instance_data         = {
-    inline = [
+  aws_ec2_instance_script       = {
+    actions = [
+      "ls -la /tmp/${var.custom_data_dir}",
       format("chmod +x /tmp/%s", var.aws_ec2_instance_script_file_name),
       format("sudo /tmp/%s", var.aws_ec2_instance_script_file_name)
     ]
-    userdata = {
-      GITEA_VERSION  = var.gitea_version
-      GITEA_PASSWORD = var.gitea_password
+    template_data = {
+      CUSTOM_DATA_DIR = format("%s/vcs", var.custom_data_dir)
+      PREFIX          = var.f5xc_aws_tgw_workload_subnet
+      GATEWAY         = cidrhost(module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-private-subnet-%s", var.project_prefix, var.project_suffix)]["cidr_block"], 1)
+      CUSTOM_DATA_DIR = var.custom_data_dir
+      GITEA_VERSION   = var.gitea_version
+      GITEA_PASSWORD  = var.gitea_password
     }
   }
-  aws_ec2_instance_script_template = format("%s.tftpl", var.aws_ec2_instance_script_template_file_name)
-  aws_ec2_instance_script_file     = format("%s.sh", var.aws_ec2_instance_script_file_name)
-  aws_subnet_private_id            = element([for s in module.aws_subnets.aws_subnet_id : s], 1)
-  aws_subnet_public_id             = element([for s in module.aws_subnets.aws_subnet_id : s], 0)
-  aws_az_name                      = var.aws_az
-  aws_region                       = var.aws_region
-  ssh_private_key_file             = abspath("keys/key")
-  ssh_public_key_file              = abspath("keys/key.pub")
-  aws_vpc_id                       = module.aws_vpc.aws_vpc_id
-  aws_ec2_instance_userdata_dirs   = [
+  aws_ec2_instance_script_template  = var.aws_ec2_instance_script_template_file_name
+  aws_ec2_instance_script_file      = var.aws_ec2_instance_script_file_name
+  aws_subnet_private_id             = module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-private-subnet-%s", var.project_prefix, var.project_suffix)]["id"]
+  aws_subnet_public_id              = module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-public-subnet-%s", var.project_prefix, var.project_suffix)]["id"]
+  aws_az_name                       = var.aws_az
+  aws_region                        = var.aws_region
+  ssh_private_key_file              = var.ssh_private_key_file
+  ssh_public_key_file               = var.ssh_public_key_file
+  aws_vpc_id                        = module.aws_vpc.aws_vpc["id"]
+  template_output_dir_path          = local.template_output_dir_path
+  template_input_dir_path           = local.template_input_dir_path
+  aws_ec2_instance_custom_data_dirs = [
     {
       name        = "instance_script"
-      source      = abspath(format("../modules/ec2/_out/%s", format("%s.sh", var.aws_ec2_instance_script_file_name)))
-      destination = format("/tmp/%s", format("%s.sh", var.aws_ec2_instance_script_file_name))
+      source      = "${local.template_output_dir_path}/${var.aws_ec2_instance_script_file_name}"
+      destination = format("/tmp/%s", var.aws_ec2_instance_script_file_name)
     },
     {
       name        = "additional_custom_data"
-      source      = abspath(format("../modules/ec2/custom_data/%s", var.aws_ec2_instance_script_file_name))
-      destination = "/tmp/custom_data"
+      source      = abspath("${var.custom_data_dir}")
+      destination = "/tmp"
     }
   ]
   custom_tags = {
-    Name    = "ec2-instance-01"
+    Name    = format("%s-%s-%s", var.project_prefix, var.aws_ec2_instance_name, var.project_suffix)
     Version = "1"
     Owner   = "c.klewar@f5.com"
   }
+
+  providers = {
+    aws = aws.default
+  }
+}
+
+output "ec2_output_values" {
+  value = module.ec2.aws_ec2_instance
+}
+
+output "script_template_file" {
+  value = abspath("templates/${var.aws_ec2_instance_script_template_file_name}")
+}
+
+output "rendered_script_file" {
+  value = "${local.template_output_dir_path}/${var.aws_ec2_instance_script_file_name}"
 }
 
 output "aws_subnet_ids" {
-  value = [for s in module.aws_subnets.aws_subnet_id : s]
-}
-
-output "aws_ec2_instance_public_ip" {
-  value = module.ec2.aws_ec2_instance_public_ip
-}
-
-output "aws_ec2_instance_public_dns" {
-  value = module.ec2.aws_ec2_instance_public_dns
+  value = module.aws_subnet.aws_subnets
 }
 ````
 

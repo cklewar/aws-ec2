@@ -155,15 +155,96 @@ resource "aws_route_table_association" "subnet" {
   route_table_id = aws_route_table.rt.id
 }
 
+module "aws_security_group_private" {
+  source                     = "./modules/aws/security_group"
+  aws_security_group_name    = format("%s-%s-%s-private-sg", var.project_prefix, var.aws_ec2_instance_name, var.project_suffix)
+  aws_vpc_id                 = module.aws_vpc.aws_vpc["id"]
+  security_group_rule_egress = [
+    {
+      from_port   = 0
+      to_port     = 0
+      protocol    = -1
+      cidr_blocks = ["0.0.0.0/0"]
+    }
+  ]
+  security_group_rule_ingress = [
+    {
+      from_port   = 0
+      to_port     = 0
+      protocol    = "-1"
+      cidr_blocks = ["10.0.0.0/8"]
+    },
+    {
+      from_port   = 0
+      to_port     = 0
+      protocol    = "-1"
+      cidr_blocks = ["172.16.0.0/16"]
+    },
+    {
+      from_port   = 0
+      to_port     = 0
+      protocol    = "-1"
+      cidr_blocks = ["192.168.0.0/16"]
+    }
+  ]
+  providers = {
+    aws = aws.default
+  }
+}
+
+module "aws_security_group_public" {
+  source                     = "./modules/aws/security_group"
+  aws_security_group_name    = format("%s-%s-%s-public-sg", var.project_prefix, var.aws_ec2_instance_name, var.project_suffix)
+  aws_vpc_id                 = module.aws_vpc.aws_vpc["id"]
+  security_group_rule_egress = [
+    {
+      from_port   = 0
+      to_port     = 0
+      protocol    = -1
+      cidr_blocks = ["0.0.0.0/0"]
+    }
+  ]
+  security_group_rule_ingress = [
+    {
+      from_port   = 22
+      to_port     = 22
+      protocol    = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+    }
+  ]
+  providers = {
+    aws = aws.default
+  }
+}
+
+module "aws_network_interface_public" {
+  source                        = "./modules/aws/network_interface"
+  aws_interface_create_eip      = true
+  aws_interface_private_ips     = ["172.16.192.10"]
+  aws_interface_security_groups = [module.aws_security_group_public.aws_security_group["id"]]
+  aws_interface_subnet_id       = module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-public-subnet-%s", var.project_prefix, var.project_suffix)]["id"]
+  providers = {
+    aws = aws.default
+  }
+}
+
+module "aws_network_interface_private" {
+  source                        = "./modules/aws/network_interface"
+  aws_interface_create_eip      = false
+  aws_interface_private_ips     = ["172.16.193.10"]
+  aws_interface_security_groups = [module.aws_security_group_private.aws_security_group["id"]]
+  aws_interface_subnet_id       = module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-private-subnet-%s", var.project_prefix, var.project_suffix)]["id"]
+  providers = {
+    aws = aws.default
+  }
+}
+
 module "ec2" {
-  source                        = "./modules/aws/ec2"
-  aws_ec2_instance_name         = format("%s-%s-%s", var.project_prefix, var.aws_ec2_instance_name, var.project_suffix)
-  aws_ec2_instance_type         = "t2.small"
-  aws_ec2_public_interface_ips  = ["172.16.192.10"]
-  aws_ec2_private_interface_ips = ["172.16.193.10"]
-  aws_ec2_instance_script       = {
+  source                  = "./modules/aws/ec2"
+  aws_ec2_instance_name   = format("%s-%s-%s", var.project_prefix, var.aws_ec2_instance_name, var.project_suffix)
+  aws_ec2_instance_type   = "t2.small"
+  aws_ec2_instance_script = {
     actions = [
-      "ls -la /tmp/${var.custom_data_dir}",
       format("chmod +x /tmp/%s", var.aws_ec2_instance_script_file_name),
       format("sudo /tmp/%s", var.aws_ec2_instance_script_file_name)
     ]
@@ -171,22 +252,28 @@ module "ec2" {
       CUSTOM_DATA_DIR = format("%s/vcs", var.custom_data_dir)
       PREFIX          = var.f5xc_aws_tgw_workload_subnet
       GATEWAY         = cidrhost(module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-private-subnet-%s", var.project_prefix, var.project_suffix)]["cidr_block"], 1)
-      CUSTOM_DATA_DIR = var.custom_data_dir
       GITEA_VERSION   = var.gitea_version
       GITEA_PASSWORD  = var.gitea_password
     }
   }
-  aws_ec2_instance_script_template  = var.aws_ec2_instance_script_template_file_name
-  aws_ec2_instance_script_file      = var.aws_ec2_instance_script_file_name
-  aws_subnet_private_id             = module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-private-subnet-%s", var.project_prefix, var.project_suffix)]["id"]
-  aws_subnet_public_id              = module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-public-subnet-%s", var.project_prefix, var.project_suffix)]["id"]
-  aws_az_name                       = var.aws_az
-  aws_region                        = var.aws_region
-  ssh_private_key_file              = var.ssh_private_key_file
-  ssh_public_key_file               = var.ssh_public_key_file
-  aws_vpc_id                        = module.aws_vpc.aws_vpc["id"]
-  template_output_dir_path          = local.template_output_dir_path
-  template_input_dir_path           = local.template_input_dir_path
+  aws_ec2_instance_script_template = var.aws_ec2_instance_script_template_file_name
+  aws_ec2_instance_script_file     = var.aws_ec2_instance_script_file_name
+  aws_az_name                      = var.aws_az
+  aws_region                       = var.aws_region
+  ssh_private_key_file             = file(var.ssh_private_key_file)
+  ssh_public_key_file              = file(var.ssh_public_key_file)
+  template_output_dir_path         = local.template_output_dir_path
+  template_input_dir_path          = local.template_input_dir_path
+  aws_ec2_network_interfaces       = [
+    {
+      device_index         = 0
+      network_interface_id = module.aws_network_interface_public.aws_network_interface["id"]
+    },
+    {
+      device_index         = 1
+      network_interface_id = module.aws_network_interface_private.aws_network_interface["id"]
+    }
+  ]
   aws_ec2_instance_custom_data_dirs = [
     {
       name        = "instance_script"
@@ -195,7 +282,7 @@ module "ec2" {
     },
     {
       name        = "additional_custom_data"
-      source      = abspath("${var.custom_data_dir}")
+      source      = abspath(var.custom_data_dir)
       destination = "/tmp"
     }
   ]

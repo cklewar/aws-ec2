@@ -283,15 +283,12 @@ output "aws_subnet_ids" {
 ## AWS EC2 example with Gitea and inline interfaces
 
 ````hcl
-module "ec2" {
-  source                        = "./modules/aws/ec2"
-  aws_ec2_instance_name         = format("%s-%s-%s", var.project_prefix, var.aws_ec2_instance_name, var.project_suffix)
-  aws_ec2_instance_type         = "t2.small"
-  aws_ec2_public_interface_ips  = ["172.16.192.10"]
-  aws_ec2_private_interface_ips = ["172.16.193.10"]
-  aws_ec2_instance_script       = {
+module "ec2_02_interface_inline" {
+  source                  = "./modules/aws/ec2"
+  aws_ec2_instance_name   = format("%s-%s-%s", var.project_prefix, var.aws_ec2_02_instance_name, var.project_suffix)
+  aws_ec2_instance_type   = "t2.small"
+  aws_ec2_instance_script = {
     actions = [
-      "ls -la /tmp/${var.custom_data_dir}",
       format("chmod +x /tmp/%s", var.aws_ec2_instance_script_file_name),
       format("sudo /tmp/%s", var.aws_ec2_instance_script_file_name)
     ]
@@ -299,22 +296,38 @@ module "ec2" {
       CUSTOM_DATA_DIR = format("%s/vcs", var.custom_data_dir)
       PREFIX          = var.f5xc_aws_tgw_workload_subnet
       GATEWAY         = cidrhost(module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-private-subnet-%s", var.project_prefix, var.project_suffix)]["cidr_block"], 1)
-      CUSTOM_DATA_DIR = var.custom_data_dir
       GITEA_VERSION   = var.gitea_version
       GITEA_PASSWORD  = var.gitea_password
     }
   }
-  aws_ec2_instance_script_template  = var.aws_ec2_instance_script_template_file_name
-  aws_ec2_instance_script_file      = var.aws_ec2_instance_script_file_name
-  aws_subnet_private_id             = module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-private-subnet-%s", var.project_prefix, var.project_suffix)]["id"]
-  aws_subnet_public_id              = module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-public-subnet-%s", var.project_prefix, var.project_suffix)]["id"]
-  aws_az_name                       = var.aws_az
-  aws_region                        = var.aws_region
-  ssh_private_key_file              = var.ssh_private_key_file
-  ssh_public_key_file               = var.ssh_public_key_file
-  aws_vpc_id                        = module.aws_vpc.aws_vpc["id"]
-  template_output_dir_path          = local.template_output_dir_path
-  template_input_dir_path           = local.template_input_dir_path
+  aws_ec2_instance_script_template = var.aws_ec2_instance_script_template_file_name
+  aws_ec2_instance_script_file     = var.aws_ec2_instance_script_file_name
+  aws_az_name                      = var.aws_az
+  aws_region                       = var.aws_region
+  ssh_private_key_file             = file(var.ssh_private_key_file)
+  ssh_public_key_file              = file(var.ssh_public_key_file)
+  template_output_dir_path         = local.template_output_dir_path
+  template_input_dir_path          = local.template_input_dir_path
+  aws_ec2_network_interfaces       = [
+    {
+      create_eip      = true
+      private_ips     = ["172.16.192.11"]
+      security_groups = [module.aws_security_group_public.aws_security_group["id"]]
+      subnet_id       = module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-public-subnet-%s", var.project_prefix, var.project_suffix)]["id"]
+      custom_tags     = {
+        "tagA" = "ValueA"
+      }
+    },
+    {
+      create_eip      = false
+      private_ips     = ["172.16.193.11"]
+      security_groups = [module.aws_security_group_private.aws_security_group["id"]]
+      subnet_id       = module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-private-subnet-%s", var.project_prefix, var.project_suffix)]["id"]
+      custom_tags     = {
+
+      }
+    }
+  ]
   aws_ec2_instance_custom_data_dirs = [
     {
       name        = "instance_script"
@@ -323,12 +336,12 @@ module "ec2" {
     },
     {
       name        = "additional_custom_data"
-      source      = abspath("${var.custom_data_dir}")
+      source      = abspath(var.custom_data_dir)
       destination = "/tmp"
     }
   ]
   custom_tags = {
-    Name    = format("%s-%s-%s", var.project_prefix, var.aws_ec2_instance_name, var.project_suffix)
+    Name    = format("%s-%s-%s", var.project_prefix, var.aws_ec2_01_instance_name, var.project_suffix)
     Version = "1"
     Owner   = "c.klewar@f5.com"
   }

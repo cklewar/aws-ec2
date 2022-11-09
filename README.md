@@ -12,8 +12,7 @@ This repository consists of Terraform templates to bring up a AWS EC2 instance w
 - Initialize with: `terraform init`
 - Apply with: `terraform apply -auto-approve` or destroy with: `terraform destroy -auto-approve`
 
-## AWS EC2 example with Gitea
-
+## AWS EC2 module common variables example
 ````hcl
 variable "project_prefix" {
   type        = string
@@ -68,6 +67,11 @@ variable "custom_data_dir" {
 variable "aws_ec2_instance_name" {
   type    = string
   default = "ec2-instance-01"
+}
+
+variable "aws_ec2_02_instance_name" {
+  type    = string
+  default = "ec2-instance-02"
 }
 
 variable "ssh_private_key_file" {
@@ -171,7 +175,114 @@ resource "aws_route_table_association" "subnet" {
   subnet_id      = each.value.id
   route_table_id = aws_route_table.rt.id
 }
+````
 
+## AWS EC2 example with Gitea and referenced interfaces
+
+````hcl
+module "aws_network_interface_public" {
+  source                        = "./modules/aws/network_interface"
+  aws_interface_create_eip      = true
+  aws_interface_private_ips     = ["172.16.192.10"]
+  aws_interface_security_groups = [module.aws_security_group_public.aws_security_group["id"]]
+  aws_interface_subnet_id       = module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-public-subnet-%s", var.project_prefix, var.project_suffix)]["id"]
+  custom_tags     = {
+        "tagA" = "ValueA"
+      }
+  providers                     = {
+    aws = aws.default
+  }
+}
+
+module "aws_network_interface_private" {
+  source                        = "./modules/aws/network_interface"
+  aws_interface_create_eip      = false
+  aws_interface_private_ips     = ["172.16.193.10"]
+  aws_interface_security_groups = [module.aws_security_group_private.aws_security_group["id"]]
+  aws_interface_subnet_id       = module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-private-subnet-%s", var.project_prefix, var.project_suffix)]["id"]
+  providers                     = {
+    aws = aws.default
+  }
+}
+
+module "ec2_01_interface_ref" {
+  source                  = "./modules/aws/ec2"
+  aws_ec2_instance_name   = format("%s-%s-%s", var.project_prefix, var.aws_ec2_01_instance_name, var.project_suffix)
+  aws_ec2_instance_type   = "t2.small"
+  aws_ec2_instance_script = {
+    actions = [
+      format("chmod +x /tmp/%s", var.aws_ec2_instance_script_file_name),
+      format("sudo /tmp/%s", var.aws_ec2_instance_script_file_name)
+    ]
+    template_data = {
+      CUSTOM_DATA_DIR = format("%s/vcs", var.custom_data_dir)
+      PREFIX          = var.f5xc_aws_tgw_workload_subnet
+      GATEWAY         = cidrhost(module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-private-subnet-%s", var.project_prefix, var.project_suffix)]["cidr_block"], 1)
+      GITEA_VERSION   = var.gitea_version
+      GITEA_PASSWORD  = var.gitea_password
+    }
+  }
+  aws_ec2_instance_script_template = var.aws_ec2_instance_script_template_file_name
+  aws_ec2_instance_script_file     = var.aws_ec2_instance_script_file_name
+  aws_az_name                      = var.aws_az
+  aws_region                       = var.aws_region
+  ssh_private_key_file             = file(var.ssh_private_key_file)
+  ssh_public_key_file              = file(var.ssh_public_key_file)
+  template_output_dir_path         = local.template_output_dir_path
+  template_input_dir_path          = local.template_input_dir_path
+  aws_ec2_network_interfaces_ref   = [
+    {
+      device_index         = 0
+      network_interface_id = module.aws_network_interface_public.aws_network_interface["id"]
+    },
+    {
+      device_index         = 1
+      network_interface_id = module.aws_network_interface_private.aws_network_interface["id"]
+    }
+  ]
+  aws_ec2_instance_custom_data_dirs = [
+    {
+      name        = "instance_script"
+      source      = "${local.template_output_dir_path}/${var.aws_ec2_instance_script_file_name}"
+      destination = format("/tmp/%s", var.aws_ec2_instance_script_file_name)
+    },
+    {
+      name        = "additional_custom_data"
+      source      = abspath(var.custom_data_dir)
+      destination = "/tmp"
+    }
+  ]
+  custom_tags = {
+    Name    = format("%s-%s-%s", var.project_prefix, var.aws_ec2_01_instance_name, var.project_suffix)
+    Version = "1"
+    Owner   = "c.klewar@f5.com"
+  }
+
+  providers = {
+    aws = aws.default
+  }
+}
+
+output "ec2_01" {
+  value = module.ec2_01_interface_ref.aws_ec2_instance
+}
+
+output "script_template_file" {
+  value = abspath("templates/${var.aws_ec2_instance_script_template_file_name}")
+}
+
+output "rendered_script_file" {
+  value = "${local.template_output_dir_path}/${var.aws_ec2_instance_script_file_name}"
+}
+
+output "aws_subnet_ids" {
+  value = module.aws_subnet.aws_subnets
+}
+````
+
+## AWS EC2 example with Gitea and inline interfaces
+
+````hcl
 module "ec2" {
   source                        = "./modules/aws/ec2"
   aws_ec2_instance_name         = format("%s-%s-%s", var.project_prefix, var.aws_ec2_instance_name, var.project_suffix)
@@ -227,8 +338,8 @@ module "ec2" {
   }
 }
 
-output "ec2_output_values" {
-  value = module.ec2.aws_ec2_instance
+output "ec2_02" {
+  value = module.ec2_02_interface_inline.aws_ec2_instance
 }
 
 output "script_template_file" {
@@ -243,4 +354,3 @@ output "aws_subnet_ids" {
   value = module.aws_subnet.aws_subnets
 }
 ````
-

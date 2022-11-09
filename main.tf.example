@@ -48,9 +48,14 @@ variable "custom_data_dir" {
   default = "custom_data"
 }
 
-variable "aws_ec2_instance_name" {
+variable "aws_ec2_01_instance_name" {
   type    = string
   default = "ec2-instance-01"
+}
+
+variable "aws_ec2_02_instance_name" {
+  type    = string
+  default = "ec2-instance-02"
 }
 
 variable "ssh_private_key_file" {
@@ -82,9 +87,9 @@ module "aws_vpc" {
   aws_az_name        = var.aws_az
   aws_vpc_cidr_block = "172.16.192.0/21"
   aws_vpc_name       = format("%s-aws-ec2-test-vpc-%s", var.project_prefix, var.project_suffix)
+  aws_owner          = "c.klewar@f5.com"
   custom_tags        = {
-    Name  = "aws-ec2-test-vpc"
-    Owner = "c.klewar@f5.com"
+    Name = "aws-ec2-test-vpc"
   }
 
   providers = {
@@ -97,30 +102,26 @@ module "aws_subnet" {
   aws_vpc_id      = module.aws_vpc.aws_vpc["id"]
   aws_vpc_subnets = [
     {
+      name                    = format("%s-aws-ec2-test-public-subnet-%s", var.project_prefix, var.project_suffix)
+      owner                   = "c.klewar@f5.com"
       map_public_ip_on_launch = true
       cidr_block              = "172.16.192.0/24"
       availability_zone       = var.aws_az
       custom_tags             = {
-        Name       = format("%s-aws-ec2-test-public-subnet-%s", var.project_prefix, var.project_suffix)
-        Owner      = "c.klewar@f5.com"
         create_rta = "false"
       }
     },
     {
+      name                    = format("%s-aws-ec2-test-private-subnet-%s", var.project_prefix, var.project_suffix)
+      owner                   = "c.klewar@f5.com"
       map_public_ip_on_launch = false
       cidr_block              = "172.16.193.0/24"
       availability_zone       = var.aws_az
       custom_tags             = {
-        Name       = format("%s-aws-ec2-test-private-subnet-%s", var.project_prefix, var.project_suffix)
-        Owner      = "c.klewar@f5.com"
         create_rta = "true"
       }
     }
   ]
-
-  custom_tags = {
-    Owner = "c.klewar@f5.com"
-  }
 
   providers = {
     aws = aws.default
@@ -157,7 +158,7 @@ resource "aws_route_table_association" "subnet" {
 
 module "aws_security_group_private" {
   source                     = "./modules/aws/security_group"
-  aws_security_group_name    = format("%s-%s-%s-private-sg", var.project_prefix, var.aws_ec2_instance_name, var.project_suffix)
+  aws_security_group_name    = format("%s-%s-%s-private-sg", var.project_prefix, var.aws_ec2_01_instance_name, var.project_suffix)
   aws_vpc_id                 = module.aws_vpc.aws_vpc["id"]
   security_group_rule_egress = [
     {
@@ -194,7 +195,7 @@ module "aws_security_group_private" {
 
 module "aws_security_group_public" {
   source                     = "./modules/aws/security_group"
-  aws_security_group_name    = format("%s-%s-%s-public-sg", var.project_prefix, var.aws_ec2_instance_name, var.project_suffix)
+  aws_security_group_name    = format("%s-%s-%s-public-sg", var.project_prefix, var.aws_ec2_01_instance_name, var.project_suffix)
   aws_vpc_id                 = module.aws_vpc.aws_vpc["id"]
   security_group_rule_egress = [
     {
@@ -223,7 +224,7 @@ module "aws_network_interface_public" {
   aws_interface_private_ips     = ["172.16.192.10"]
   aws_interface_security_groups = [module.aws_security_group_public.aws_security_group["id"]]
   aws_interface_subnet_id       = module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-public-subnet-%s", var.project_prefix, var.project_suffix)]["id"]
-  providers = {
+  providers                     = {
     aws = aws.default
   }
 }
@@ -234,14 +235,72 @@ module "aws_network_interface_private" {
   aws_interface_private_ips     = ["172.16.193.10"]
   aws_interface_security_groups = [module.aws_security_group_private.aws_security_group["id"]]
   aws_interface_subnet_id       = module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-private-subnet-%s", var.project_prefix, var.project_suffix)]["id"]
+  providers                     = {
+    aws = aws.default
+  }
+}
+
+module "ec2_01_interface_ref" {
+  source                  = "./modules/aws/ec2"
+  aws_ec2_instance_name   = format("%s-%s-%s", var.project_prefix, var.aws_ec2_01_instance_name, var.project_suffix)
+  aws_ec2_instance_type   = "t2.small"
+  aws_ec2_instance_script = {
+    actions = [
+      format("chmod +x /tmp/%s", var.aws_ec2_instance_script_file_name),
+      format("sudo /tmp/%s", var.aws_ec2_instance_script_file_name)
+    ]
+    template_data = {
+      CUSTOM_DATA_DIR = format("%s/vcs", var.custom_data_dir)
+      PREFIX          = var.f5xc_aws_tgw_workload_subnet
+      GATEWAY         = cidrhost(module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-private-subnet-%s", var.project_prefix, var.project_suffix)]["cidr_block"], 1)
+      GITEA_VERSION   = var.gitea_version
+      GITEA_PASSWORD  = var.gitea_password
+    }
+  }
+  aws_ec2_instance_script_template = var.aws_ec2_instance_script_template_file_name
+  aws_ec2_instance_script_file     = var.aws_ec2_instance_script_file_name
+  aws_az_name                      = var.aws_az
+  aws_region                       = var.aws_region
+  ssh_private_key_file             = file(var.ssh_private_key_file)
+  ssh_public_key_file              = file(var.ssh_public_key_file)
+  template_output_dir_path         = local.template_output_dir_path
+  template_input_dir_path          = local.template_input_dir_path
+  aws_ec2_network_interfaces_ref   = [
+    {
+      device_index         = 0
+      network_interface_id = module.aws_network_interface_public.aws_network_interface["id"]
+    },
+    {
+      device_index         = 1
+      network_interface_id = module.aws_network_interface_private.aws_network_interface["id"]
+    }
+  ]
+  aws_ec2_instance_custom_data_dirs = [
+    {
+      name        = "instance_script"
+      source      = "${local.template_output_dir_path}/${var.aws_ec2_instance_script_file_name}"
+      destination = format("/tmp/%s", var.aws_ec2_instance_script_file_name)
+    },
+    {
+      name        = "additional_custom_data"
+      source      = abspath(var.custom_data_dir)
+      destination = "/tmp"
+    }
+  ]
+  custom_tags = {
+    Name    = format("%s-%s-%s", var.project_prefix, var.aws_ec2_01_instance_name, var.project_suffix)
+    Version = "1"
+    Owner   = "c.klewar@f5.com"
+  }
+
   providers = {
     aws = aws.default
   }
 }
 
-module "ec2" {
+module "ec2_02_interface_inline" {
   source                  = "./modules/aws/ec2"
-  aws_ec2_instance_name   = format("%s-%s-%s", var.project_prefix, var.aws_ec2_instance_name, var.project_suffix)
+  aws_ec2_instance_name   = format("%s-%s-%s", var.project_prefix, var.aws_ec2_02_instance_name, var.project_suffix)
   aws_ec2_instance_type   = "t2.small"
   aws_ec2_instance_script = {
     actions = [
@@ -266,12 +325,19 @@ module "ec2" {
   template_input_dir_path          = local.template_input_dir_path
   aws_ec2_network_interfaces       = [
     {
-      device_index         = 0
-      network_interface_id = module.aws_network_interface_public.aws_network_interface["id"]
+      create_eip      = true
+      private_ips     = ["172.16.192.11"]
+      security_groups = [module.aws_security_group_public.aws_security_group["id"]]
+      subnet_id       = module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-public-subnet-%s", var.project_prefix, var.project_suffix)]["id"]
+      custom_tags     = {
+        "tagA" = "ValueA"
+      }
     },
     {
-      device_index         = 1
-      network_interface_id = module.aws_network_interface_private.aws_network_interface["id"]
+      create_eip      = false
+      private_ips     = ["172.16.193.11"]
+      security_groups = [module.aws_security_group_private.aws_security_group["id"]]
+      subnet_id       = module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-private-subnet-%s", var.project_prefix, var.project_suffix)]["id"]
     }
   ]
   aws_ec2_instance_custom_data_dirs = [
@@ -287,7 +353,7 @@ module "ec2" {
     }
   ]
   custom_tags = {
-    Name    = format("%s-%s-%s", var.project_prefix, var.aws_ec2_instance_name, var.project_suffix)
+    Name    = format("%s-%s-%s", var.project_prefix, var.aws_ec2_01_instance_name, var.project_suffix)
     Version = "1"
     Owner   = "c.klewar@f5.com"
   }
@@ -297,8 +363,12 @@ module "ec2" {
   }
 }
 
-output "ec2_output_values" {
-  value = module.ec2.aws_ec2_instance
+output "ec2_01" {
+  value = module.ec2_01_interface_ref.aws_ec2_instance
+}
+
+output "ec2_02" {
+  value = module.ec2_02_interface_inline.aws_ec2_instance
 }
 
 output "script_template_file" {

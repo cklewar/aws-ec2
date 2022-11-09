@@ -329,15 +329,15 @@ module "ec2_02_interface_inline" {
       private_ips     = ["172.16.192.11"]
       security_groups = [module.aws_security_group_public.aws_security_group["id"]]
       subnet_id       = module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-public-subnet-%s", var.project_prefix, var.project_suffix)]["id"]
+      custom_tags     = {
+        "tagA" = "ValueA"
+      }
     },
     {
       create_eip      = false
       private_ips     = ["172.16.193.11"]
       security_groups = [module.aws_security_group_private.aws_security_group["id"]]
       subnet_id       = module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-private-subnet-%s", var.project_prefix, var.project_suffix)]["id"]
-      custom_tags = {
-
-      }
     }
   ]
   aws_ec2_instance_custom_data_dirs = [

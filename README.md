@@ -95,6 +95,10 @@ provider "aws" {
 locals {
   template_output_dir_path = abspath("_out/")
   template_input_dir_path  = abspath("templates/")
+  custom_tags              = {
+    f5xc-feature = "aws-ec2"
+    f5xc-tenant  = "playground"
+  }
 }
 
 module "aws_vpc" {
@@ -103,12 +107,9 @@ module "aws_vpc" {
   aws_az_name        = var.aws_az
   aws_vpc_cidr_block = "172.16.192.0/21"
   aws_vpc_name       = format("%s-aws-ec2-test-vpc-%s", var.project_prefix, var.project_suffix)
-  custom_tags        = {
-    Name  = "aws-ec2-test-vpc"
-    Owner = "c.klewar@f5.com"
-  }
-
-  providers = {
+  aws_owner          = var.owner
+  custom_tags        = local.custom_tags
+  providers          = {
     aws = aws.default
   }
 }
@@ -119,7 +120,7 @@ module "aws_subnet" {
   aws_vpc_subnets = [
     {
       name                    = format("%s-aws-ec2-test-public-subnet-%s", var.project_prefix, var.project_suffix)
-      owner                   = "c.klewar@f5.com"
+     owner                   = var.owner
       map_public_ip_on_launch = true
       cidr_block              = "172.16.192.0/24"
       availability_zone       = var.aws_az
@@ -129,7 +130,7 @@ module "aws_subnet" {
     },
     {
       name                    = format("%s-aws-ec2-test-private-subnet-%s", var.project_prefix, var.project_suffix)
-      owner                   = "c.klewar@f5.com"
+     owner                   = var.owner
       map_public_ip_on_launch = false
       cidr_block              = "172.16.193.0/24"
       availability_zone       = var.aws_az
@@ -148,7 +149,7 @@ resource "aws_internet_gateway" "igw" {
   provider = aws.default
   vpc_id   = module.aws_vpc.aws_vpc["id"]
   tags     = {
-    Owner = "c.klewar@f5.com"
+    Owner = var.owner
   }
 }
 
@@ -160,7 +161,7 @@ resource "aws_route_table" "rt" {
     gateway_id = aws_internet_gateway.igw.id
   }
   tags = {
-    Owner = "c.klewar@f5.com"
+    Owner = var.owner
   }
 }
 
@@ -170,6 +171,68 @@ resource "aws_route_table_association" "subnet" {
   for_each       = module.aws_subnet.aws_subnets
   subnet_id      = each.value.id
   route_table_id = aws_route_table.rt.id
+}
+
+module "aws_security_group_private" {
+  source                     = "./modules/aws/security_group"
+  aws_security_group_name    = format("%s-%s-%s-private-sg", var.project_prefix, var.aws_ec2_01_instance_name, var.project_suffix)
+  aws_vpc_id                 = module.aws_vpc.aws_vpc["id"]
+  security_group_rule_egress = [
+    {
+      from_port   = 0
+      to_port     = 0
+      protocol    = -1
+      cidr_blocks = ["0.0.0.0/0"]
+    }
+  ]
+  security_group_rule_ingress = [
+    {
+      from_port   = 0
+      to_port     = 0
+      protocol    = "-1"
+      cidr_blocks = ["10.0.0.0/8"]
+    },
+    {
+      from_port   = 0
+      to_port     = 0
+      protocol    = "-1"
+      cidr_blocks = ["172.16.0.0/16"]
+    },
+    {
+      from_port   = 0
+      to_port     = 0
+      protocol    = "-1"
+      cidr_blocks = ["192.168.0.0/16"]
+    }
+  ]
+  providers = {
+    aws = aws.default
+  }
+}
+
+module "aws_security_group_public" {
+  source                     = "./modules/aws/security_group"
+  aws_security_group_name    = format("%s-%s-%s-public-sg", var.project_prefix, var.aws_ec2_01_instance_name, var.project_suffix)
+  aws_vpc_id                 = module.aws_vpc.aws_vpc["id"]
+  security_group_rule_egress = [
+    {
+      from_port   = 0
+      to_port     = 0
+      protocol    = -1
+      cidr_blocks = ["0.0.0.0/0"]
+    }
+  ]
+  security_group_rule_ingress = [
+    {
+      from_port   = 22
+      to_port     = 22
+      protocol    = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+    }
+  ]
+  providers = {
+    aws = aws.default
+  }
 }
 ````
 
@@ -251,7 +314,7 @@ module "ec2_01_interface_ref" {
   custom_tags = {
     Name    = format("%s-%s-%s", var.project_prefix, var.aws_ec2_01_instance_name, var.project_suffix)
     Version = "1"
-    Owner   = "c.klewar@f5.com"
+    Owner   = var.owner
   }
 
   providers = {
@@ -339,7 +402,7 @@ module "ec2_02_interface_inline" {
   custom_tags = {
     Name    = format("%s-%s-%s", var.project_prefix, var.aws_ec2_01_instance_name, var.project_suffix)
     Version = "1"
-    Owner   = "c.klewar@f5.com"
+    Owner   = var.owner
   }
 
   providers = {

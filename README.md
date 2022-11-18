@@ -118,30 +118,26 @@ module "aws_subnet" {
   aws_vpc_id      = module.aws_vpc.aws_vpc["id"]
   aws_vpc_subnets = [
     {
+      name                    = format("%s-aws-ec2-test-public-subnet-%s", var.project_prefix, var.project_suffix)
+      owner                   = "c.klewar@f5.com"
       map_public_ip_on_launch = true
       cidr_block              = "172.16.192.0/24"
       availability_zone       = var.aws_az
       custom_tags             = {
-        Name       = format("%s-aws-ec2-test-public-subnet-%s", var.project_prefix, var.project_suffix)
-        Owner      = "c.klewar@f5.com"
         create_rta = "false"
       }
     },
     {
+      name                    = format("%s-aws-ec2-test-private-subnet-%s", var.project_prefix, var.project_suffix)
+      owner                   = "c.klewar@f5.com"
       map_public_ip_on_launch = false
       cidr_block              = "172.16.193.0/24"
       availability_zone       = var.aws_az
       custom_tags             = {
-        Name       = format("%s-aws-ec2-test-private-subnet-%s", var.project_prefix, var.project_suffix)
-        Owner      = "c.klewar@f5.com"
         create_rta = "true"
       }
     }
   ]
-
-  custom_tags = {
-    Owner = "c.klewar@f5.com"
-  }
 
   providers = {
     aws = aws.default

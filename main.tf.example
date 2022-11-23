@@ -32,6 +32,7 @@ variable "aws_ec2_instance_script_template_file_name" {
 
 variable "gitea_version" {
   type    = string
+  default = "1.17.2"
 }
 
 variable "gitea_password" {
@@ -59,7 +60,7 @@ variable "aws_ec2_02_instance_name" {
 }
 
 variable "ssh_private_key_file" {
-  type    = string
+  type = string
 }
 
 variable "ssh_public_key_file" {
@@ -71,6 +72,11 @@ variable "f5xc_aws_tgw_workload_subnet" {
   default = "192.168.168.0/26"
 }
 
+variable "owner" {
+  type    = string
+  default = "c.klewar@f5.com"
+}
+
 provider "aws" {
   region = var.aws_region
   alias  = "default"
@@ -79,6 +85,10 @@ provider "aws" {
 locals {
   template_output_dir_path = abspath("_out/")
   template_input_dir_path  = abspath("templates/")
+  custom_tags              = {
+    f5xc-feature = "aws-ec2"
+    f5xc-tenant  = "playground"
+  }
 }
 
 module "aws_vpc" {
@@ -87,12 +97,9 @@ module "aws_vpc" {
   aws_az_name        = var.aws_az
   aws_vpc_cidr_block = "172.16.192.0/21"
   aws_vpc_name       = format("%s-aws-ec2-test-vpc-%s", var.project_prefix, var.project_suffix)
-  aws_owner          = "c.klewar@f5.com"
-  custom_tags        = {
-    Name = "aws-ec2-test-vpc"
-  }
-
-  providers = {
+  aws_owner          = var.owner
+  custom_tags        = local.custom_tags
+  providers          = {
     aws = aws.default
   }
 }
@@ -103,26 +110,21 @@ module "aws_subnet" {
   aws_vpc_subnets = [
     {
       name                    = format("%s-aws-ec2-test-public-subnet-%s", var.project_prefix, var.project_suffix)
-      owner                   = "c.klewar@f5.com"
+      owner                   = var.owner
       map_public_ip_on_launch = true
       cidr_block              = "172.16.192.0/24"
       availability_zone       = var.aws_az
-      custom_tags             = {
-        create_rta = "false"
-      }
+      custom_tags             = local.custom_tags
     },
     {
       name                    = format("%s-aws-ec2-test-private-subnet-%s", var.project_prefix, var.project_suffix)
-      owner                   = "c.klewar@f5.com"
+      owner                   = var.owner
       map_public_ip_on_launch = false
       cidr_block              = "172.16.193.0/24"
       availability_zone       = var.aws_az
-      custom_tags             = {
-        create_rta = "true"
-      }
+      custom_tags             = local.custom_tags
     }
   ]
-
   providers = {
     aws = aws.default
   }
@@ -131,9 +133,7 @@ module "aws_subnet" {
 resource "aws_internet_gateway" "igw" {
   provider = aws.default
   vpc_id   = module.aws_vpc.aws_vpc["id"]
-  tags     = {
-    Owner = "c.klewar@f5.com"
-  }
+  tags     = merge({ "Owner" : var.owner }, local.custom_tags)
 }
 
 resource "aws_route_table" "rt" {
@@ -143,9 +143,7 @@ resource "aws_route_table" "rt" {
     cidr_block = "0.0.0.0/0"
     gateway_id = aws_internet_gateway.igw.id
   }
-  tags = {
-    Owner = "c.klewar@f5.com"
-  }
+  tags = merge({ "Owner" : var.owner }, local.custom_tags)
 }
 
 resource "aws_route_table_association" "subnet" {
@@ -224,6 +222,7 @@ module "aws_network_interface_public" {
   aws_interface_private_ips     = ["172.16.192.10"]
   aws_interface_security_groups = [module.aws_security_group_public.aws_security_group["id"]]
   aws_interface_subnet_id       = module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-public-subnet-%s", var.project_prefix, var.project_suffix)]["id"]
+  custom_tags                   = merge({ "Owner" : var.owner }, local.custom_tags)
   providers                     = {
     aws = aws.default
   }
@@ -235,6 +234,7 @@ module "aws_network_interface_private" {
   aws_interface_private_ips     = ["172.16.193.10"]
   aws_interface_security_groups = [module.aws_security_group_private.aws_security_group["id"]]
   aws_interface_subnet_id       = module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-private-subnet-%s", var.project_prefix, var.project_suffix)]["id"]
+  custom_tags                   = merge({ "Owner" : var.owner }, local.custom_tags)
   providers                     = {
     aws = aws.default
   }
@@ -287,13 +287,8 @@ module "ec2_01_interface_ref" {
       destination = "/tmp"
     }
   ]
-  custom_tags = {
-    Name    = format("%s-%s-%s", var.project_prefix, var.aws_ec2_01_instance_name, var.project_suffix)
-    Version = "1"
-    Owner   = "c.klewar@f5.com"
-  }
-
-  providers = {
+  custom_tags = merge({ "Owner" : var.owner }, local.custom_tags)
+  providers   = {
     aws = aws.default
   }
 }
@@ -329,15 +324,14 @@ module "ec2_02_interface_inline" {
       private_ips     = ["172.16.192.11"]
       security_groups = [module.aws_security_group_public.aws_security_group["id"]]
       subnet_id       = module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-public-subnet-%s", var.project_prefix, var.project_suffix)]["id"]
-      custom_tags     = {
-        "tagA" = "ValueA"
-      }
+      custom_tags     = merge({ "Owner" : var.owner }, local.custom_tags)
     },
     {
       create_eip      = false
       private_ips     = ["172.16.193.11"]
       security_groups = [module.aws_security_group_private.aws_security_group["id"]]
       subnet_id       = module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-private-subnet-%s", var.project_prefix, var.project_suffix)]["id"]
+      custom_tags     = merge({ "Owner" : var.owner }, local.custom_tags)
     }
   ]
   aws_ec2_instance_custom_data_dirs = [
@@ -352,13 +346,8 @@ module "ec2_02_interface_inline" {
       destination = "/tmp"
     }
   ]
-  custom_tags = {
-    Name    = format("%s-%s-%s", var.project_prefix, var.aws_ec2_01_instance_name, var.project_suffix)
-    Version = "1"
-    Owner   = "c.klewar@f5.com"
-  }
-
-  providers = {
+  custom_tags = merge({ "Owner" : var.owner }, local.custom_tags)
+  providers   = {
     aws = aws.default
   }
 }

@@ -120,26 +120,21 @@ module "aws_subnet" {
   aws_vpc_subnets = [
     {
       name                    = format("%s-aws-ec2-test-public-subnet-%s", var.project_prefix, var.project_suffix)
-     owner                   = var.owner
+      owner                   = var.owner
       map_public_ip_on_launch = true
       cidr_block              = "172.16.192.0/24"
       availability_zone       = var.aws_az
-      custom_tags             = {
-        create_rta = "false"
-      }
+      custom_tags             = local.custom_tags
     },
     {
       name                    = format("%s-aws-ec2-test-private-subnet-%s", var.project_prefix, var.project_suffix)
-     owner                   = var.owner
+      owner                   = var.owner
       map_public_ip_on_launch = false
       cidr_block              = "172.16.193.0/24"
       availability_zone       = var.aws_az
-      custom_tags             = {
-        create_rta = "true"
-      }
+      custom_tags             = local.custom_tags
     }
   ]
-
   providers = {
     aws = aws.default
   }
@@ -148,9 +143,7 @@ module "aws_subnet" {
 resource "aws_internet_gateway" "igw" {
   provider = aws.default
   vpc_id   = module.aws_vpc.aws_vpc["id"]
-  tags     = {
-    Owner = var.owner
-  }
+  tags     = merge({ "Owner" : var.owner }, local.custom_tags)
 }
 
 resource "aws_route_table" "rt" {
@@ -160,14 +153,11 @@ resource "aws_route_table" "rt" {
     cidr_block = "0.0.0.0/0"
     gateway_id = aws_internet_gateway.igw.id
   }
-  tags = {
-    Owner = var.owner
-  }
+  tags = merge({ "Owner" : var.owner }, local.custom_tags)
 }
 
 resource "aws_route_table_association" "subnet" {
   provider       = aws.default
-  # for_each       = {for key, value in module.aws_subnet.aws_subnets : key => value if value.tags["create_rta"] == "true"}
   for_each       = module.aws_subnet.aws_subnets
   subnet_id      = each.value.id
   route_table_id = aws_route_table.rt.id
@@ -311,13 +301,8 @@ module "ec2_01_interface_ref" {
       destination = "/tmp"
     }
   ]
-  custom_tags = {
-    Name    = format("%s-%s-%s", var.project_prefix, var.aws_ec2_01_instance_name, var.project_suffix)
-    Version = "1"
-    Owner   = var.owner
-  }
-
-  providers = {
+  custom_tags = merge({ "Owner" : var.owner }, local.custom_tags)
+  providers   = {
     aws = aws.default
   }
 }
@@ -373,18 +358,14 @@ module "ec2_02_interface_inline" {
       private_ips     = ["172.16.192.11"]
       security_groups = [module.aws_security_group_public.aws_security_group["id"]]
       subnet_id       = module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-public-subnet-%s", var.project_prefix, var.project_suffix)]["id"]
-      custom_tags     = {
-        "tagA" = "ValueA"
-      }
+      custom_tags     = merge({ "Owner" : var.owner }, local.custom_tags)
     },
     {
       create_eip      = false
       private_ips     = ["172.16.193.11"]
       security_groups = [module.aws_security_group_private.aws_security_group["id"]]
       subnet_id       = module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-private-subnet-%s", var.project_prefix, var.project_suffix)]["id"]
-      custom_tags     = {
-
-      }
+      custom_tags     = merge({ "Owner" : var.owner }, local.custom_tags)
     }
   ]
   aws_ec2_instance_custom_data_dirs = [
@@ -399,13 +380,8 @@ module "ec2_02_interface_inline" {
       destination = "/tmp"
     }
   ]
-  custom_tags = {
-    Name    = format("%s-%s-%s", var.project_prefix, var.aws_ec2_01_instance_name, var.project_suffix)
-    Version = "1"
-    Owner   = var.owner
-  }
-
-  providers = {
+  custom_tags = merge({ "Owner" : var.owner }, local.custom_tags)
+  providers   = {
     aws = aws.default
   }
 }

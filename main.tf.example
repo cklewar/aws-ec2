@@ -242,6 +242,7 @@ module "aws_network_interface_private" {
 
 module "ec2_01_interface_ref" {
   source                  = "./modules/aws/ec2"
+  owner                   = var.owner
   aws_ec2_instance_name   = format("%s-%s-%s", var.project_prefix, var.aws_ec2_01_instance_name, var.project_suffix)
   aws_ec2_instance_type   = "t2.small"
   aws_ec2_instance_script = {
@@ -287,7 +288,7 @@ module "ec2_01_interface_ref" {
       destination = "/tmp"
     }
   ]
-  custom_tags = merge({ "Owner" : var.owner }, local.custom_tags)
+  custom_tags = local.custom_tags
   providers   = {
     aws = aws.default
   }
@@ -295,6 +296,7 @@ module "ec2_01_interface_ref" {
 
 module "ec2_02_interface_inline" {
   source                  = "./modules/aws/ec2"
+  owner                   = var.owner
   aws_ec2_instance_name   = format("%s-%s-%s", var.project_prefix, var.aws_ec2_02_instance_name, var.project_suffix)
   aws_ec2_instance_type   = "t2.small"
   aws_ec2_instance_script = {
@@ -346,7 +348,7 @@ module "ec2_02_interface_inline" {
       destination = "/tmp"
     }
   ]
-  custom_tags = merge({ "Owner" : var.owner }, local.custom_tags)
+  custom_tags = local.custom_tags
   providers   = {
     aws = aws.default
   }

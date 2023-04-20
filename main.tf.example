@@ -1,19 +1,3 @@
-# AWS-EC2
-
-This repository consists of Terraform templates to bring up a AWS EC2 instance with two NICs.
-
-## Usage
-
-- Clone this repo with: `git clone --recurse-submodules https://github.com/cklewar/aws-ec2`
-- Enter repository directory with: `cd aws-ec2`
-- Export AWS `access_key` and `aws_secrect_key` environment variables
-- Pick and choose from below examples and add mandatory input data and copy data into file `main.tf.example`
-- Rename file __main.tf.example__ to __main.tf__ with: `rename main.tf.example main.tf`
-- Initialize with: `terraform init`
-- Apply with: `terraform apply -auto-approve` or destroy with: `terraform destroy -auto-approve`
-
-## AWS EC2 module common variables example
-````hcl
 variable "project_prefix" {
   type        = string
   description = "prefix string put in front of string"
@@ -48,6 +32,7 @@ variable "aws_ec2_instance_script_template_file_name" {
 
 variable "gitea_version" {
   type    = string
+  default = "1.17.2"
 }
 
 variable "gitea_password" {
@@ -64,7 +49,7 @@ variable "custom_data_dir" {
   default = "custom_data"
 }
 
-variable "aws_ec2_instance_name" {
+variable "aws_ec2_01_instance_name" {
   type    = string
   default = "ec2-instance-01"
 }
@@ -75,7 +60,7 @@ variable "aws_ec2_02_instance_name" {
 }
 
 variable "ssh_private_key_file" {
-  type    = string
+  type = string
 }
 
 variable "ssh_public_key_file" {
@@ -85,6 +70,11 @@ variable "ssh_public_key_file" {
 variable "f5xc_aws_tgw_workload_subnet" {
   type    = string
   default = "192.168.168.0/26"
+}
+
+variable "owner" {
+  type    = string
+  default = "c.klewar@f5.com"
 }
 
 provider "aws" {
@@ -158,40 +148,34 @@ resource "aws_route_table" "rt" {
 
 resource "aws_route_table_association" "subnet" {
   provider       = aws.default
+  # for_each       = {for key, value in module.aws_subnet.aws_subnets : key => value if value.tags["create_rta"] == "true"}
   for_each       = module.aws_subnet.aws_subnets
   subnet_id      = each.value.id
   route_table_id = aws_route_table.rt.id
 }
 
 module "aws_security_group_private" {
-  source                     = "./modules/aws/security_group"
-  aws_security_group_name    = format("%s-%s-%s-private-sg", var.project_prefix, var.aws_ec2_01_instance_name, var.project_suffix)
-  aws_vpc_id                 = module.aws_vpc.aws_vpc["id"]
-  security_group_rule_egress = [
+  source                      = "./modules/aws/security_group"
+  description                 = "SG EC2 Instance private interface"
+  aws_vpc_id                  = module.aws_vpc.aws_vpc["id"]
+  aws_security_group_name     = format("%s-%s-%s-private-sg", var.project_prefix, var.aws_ec2_01_instance_name, var.project_suffix)
+  security_group_rules_egress = [
     {
-      from_port   = 0
-      to_port     = 0
-      protocol    = -1
+      ip_protocol = -1
       cidr_blocks = ["0.0.0.0/0"]
     }
   ]
-  security_group_rule_ingress = [
+  security_group_rules_ingress = [
     {
-      from_port   = 0
-      to_port     = 0
-      protocol    = "-1"
+      ip_protocol = "-1"
       cidr_blocks = ["10.0.0.0/8"]
     },
     {
-      from_port   = 0
-      to_port     = 0
-      protocol    = "-1"
+      ip_protocol = "-1"
       cidr_blocks = ["172.16.0.0/16"]
     },
     {
-      from_port   = 0
-      to_port     = 0
-      protocol    = "-1"
+      ip_protocol = "-1"
       cidr_blocks = ["192.168.0.0/16"]
     }
   ]
@@ -201,22 +185,21 @@ module "aws_security_group_private" {
 }
 
 module "aws_security_group_public" {
-  source                     = "./modules/aws/security_group"
-  aws_security_group_name    = format("%s-%s-%s-public-sg", var.project_prefix, var.aws_ec2_01_instance_name, var.project_suffix)
-  aws_vpc_id                 = module.aws_vpc.aws_vpc["id"]
-  security_group_rule_egress = [
+  source                      = "./modules/aws/security_group"
+  description                 = "SG EC2 Instance public interface"
+  aws_vpc_id                  = module.aws_vpc.aws_vpc["id"]
+  aws_security_group_name     = format("%s-%s-%s-public-sg", var.project_prefix, var.aws_ec2_01_instance_name, var.project_suffix)
+  security_group_rules_egress = [
     {
-      from_port   = 0
-      to_port     = 0
-      protocol    = -1
+      ip_protocol = -1
       cidr_blocks = ["0.0.0.0/0"]
     }
   ]
-  security_group_rule_ingress = [
+  security_group_rules_ingress = [
     {
       from_port   = 22
       to_port     = 22
-      protocol    = "tcp"
+      ip_protocol = "tcp"
       cidr_blocks = ["0.0.0.0/0"]
     }
   ]
@@ -224,20 +207,14 @@ module "aws_security_group_public" {
     aws = aws.default
   }
 }
-````
 
-## AWS EC2 example with Gitea and referenced interfaces
-
-````hcl
 module "aws_network_interface_public" {
   source                        = "./modules/aws/network_interface"
   aws_interface_create_eip      = true
   aws_interface_private_ips     = ["172.16.192.10"]
   aws_interface_security_groups = [module.aws_security_group_public.aws_security_group["id"]]
   aws_interface_subnet_id       = module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-public-subnet-%s", var.project_prefix, var.project_suffix)]["id"]
-  custom_tags     = {
-        "tagA" = "ValueA"
-      }
+  custom_tags                   = merge({ "Owner" : var.owner }, local.custom_tags)
   providers                     = {
     aws = aws.default
   }
@@ -249,6 +226,7 @@ module "aws_network_interface_private" {
   aws_interface_private_ips     = ["172.16.193.10"]
   aws_interface_security_groups = [module.aws_security_group_private.aws_security_group["id"]]
   aws_interface_subnet_id       = module.aws_subnet.aws_subnets[format("%s-aws-ec2-test-private-subnet-%s", var.project_prefix, var.project_suffix)]["id"]
+  custom_tags                   = merge({ "Owner" : var.owner }, local.custom_tags)
   providers                     = {
     aws = aws.default
   }
@@ -308,26 +286,6 @@ module "ec2_01_interface_ref" {
   }
 }
 
-output "ec2_01" {
-  value = module.ec2_01_interface_ref.aws_ec2_instance
-}
-
-output "script_template_file" {
-  value = abspath("templates/${var.aws_ec2_instance_script_template_file_name}")
-}
-
-output "rendered_script_file" {
-  value = "${local.template_output_dir_path}/${var.aws_ec2_instance_script_file_name}"
-}
-
-output "aws_subnet_ids" {
-  value = module.aws_subnet.aws_subnets
-}
-````
-
-## AWS EC2 example with Gitea and inline interfaces
-
-````hcl
 module "ec2_02_interface_inline" {
   source                  = "./modules/aws/ec2"
   owner                   = var.owner
@@ -388,6 +346,10 @@ module "ec2_02_interface_inline" {
   }
 }
 
+output "ec2_01" {
+  value = module.ec2_01_interface_ref.aws_ec2_instance
+}
+
 output "ec2_02" {
   value = module.ec2_02_interface_inline.aws_ec2_instance
 }
@@ -403,4 +365,3 @@ output "rendered_script_file" {
 output "aws_subnet_ids" {
   value = module.aws_subnet.aws_subnets
 }
-````

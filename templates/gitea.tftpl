@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+
+set -e
+
+until [[ -f /var/lib/cloud/instance/boot-finished ]]; do
+  sleep 1
+done
+
+sudo apt-get update
+sudo apt-get -y install --no-install-recommends git sqlite3 xz-utils curl net-tools tcpdump traceroute iputils-ping jq wget
+sudo [ -d /tmp/custom_data/vcs ] || mkdir -p /tmp/custom_data/vcs
+wget https://dl.gitea.io/gitea/${GITEA_VERSION}/gitea-${GITEA_VERSION}-linux-amd64.xz -P /tmp
+wget https://dl.gitea.io/gitea/${GITEA_VERSION}/gitea-${GITEA_VERSION}-linux-amd64.xz.asc -P /tmp
+gpg --keyserver keys.openpgp.org --recv 7C9E68152594688862D62AF62D9AE806EC1592E2
+gpg --verify /tmp/gitea-${GITEA_VERSION}-linux-amd64.xz.asc /tmp/gitea-${GITEA_VERSION}-linux-amd64.xz
+xz --decompress /tmp/gitea-${GITEA_VERSION}-linux-amd64.xz
+if id "$1" &>/dev/null; then
+    echo 'user git found'
+else
+    sudo adduser \
+    --system \
+    --shell /bin/bash \
+    --gecos 'Git Version Control' \
+    --group \
+    --disabled-password \
+    --home /home/git \
+    git
+fi
+sudo mv /tmp/gitea-${GITEA_VERSION}-linux-amd64 /usr/local/bin/gitea
+sudo chmod +x /usr/local/bin/gitea
+sudo mkdir -p /var/lib/gitea/{custom,data,log}
+sudo chown -R git:git /var/lib/gitea/
+sudo chmod -R 750 /var/lib/gitea/
+sudo [ -d /etc/gitea ] || mkdir /etc/gitea
+sudo chown root:git /etc/gitea
+sudo chmod 770 /etc/gitea
+sudo [ -d /var/lib/gitea/custom/conf ] || mkdir -p /var/lib/gitea/custom/conf
+export GITEA_CUSTOM=/var/lib/gitea/custom/
+export GITEA_WORK_DIR=/var/lib/gitea/
+echo "################# /tmp/${CUSTOM_DATA_DIR} ####################"
+ls -la /tmp/${CUSTOM_DATA_DIR}
+echo "################# /tmp/${CUSTOM_DATA_DIR} ####################"
+cp /tmp/${CUSTOM_DATA_DIR}/app.ini /var/lib/gitea/custom/conf/app.ini
+sudo chown git:git /var/lib/gitea/custom/conf
+sudo chown git:git /var/lib/gitea/custom/conf/app.ini
+sudo chmod 750 /var/lib/gitea/custom/conf
+sudo chmod 640 /var/lib/gitea/custom/conf/app.ini
+sudo [ ! -f /etc/gitea/app.ini ] && ln -s /var/lib/gitea/custom/conf/app.ini /etc/gitea/app.ini
+echo "################# /etc/gitea ####################"
+sudo ls -la /etc/gitea
+echo "################# /etc/gitea ####################"
+sudo chown root:git /etc/gitea/app.ini
+sudo chmod 750 /etc/gitea
+sudo chmod 640 /etc/gitea/app.ini
+sudo chmod 770 /var/lib/gitea/custom/conf/app.ini
+sudo wget https://raw.githubusercontent.com/go-gitea/gitea/main/contrib/systemd/gitea.service -P /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now gitea
+sleep 5
+ps ax | grep gitea
+sudo -u git gitea admin user create --username gitea --password ${GITEA_PASSWORD} --email gitea@example.com -c /var/lib/gitea/custom/conf/app.ini
+sudo -u git gitea generate secret INTERNAL_TOKEN -c /var/lib/gitea/custom/conf/app.ini
+sudo -u git gitea generate secret JWT_SECRET -c /var/lib/gitea/custom/conf/app.ini
+sudo -u git gitea generate secret SECRET_KEY -c /var/lib/gitea/custom/conf/app.ini
+sleep 5
+TOKEN=$(curl --silent -X POST -H "Content-Type: application/json" -k -d '{"name": "gitea"}' -u gitea:${GITEA_PASSWORD} http://localhost:3000/api/v1/users/gitea/tokens | jq -r .sha1)
+curl -k -X POST \
+  "http://localhost:3000/api/v1/user/repos" \
+  -H "content-type: application/json" \
+  -H "Authorization: token $TOKEN" \
+  -d '{
+    "name":"awaf",
+    "auto_init": true
+  }'
+CONTENT=$(cat /tmp/${CUSTOM_DATA_DIR}/waf_policy.json | base64)
+JSON_FMT='{"author": {"email": "gitea@example.com", "name": "gitea"}, "branch": "main", "committer": {"email": "gitea@example.com", "name": "gitea"}, "content": "%s", "message": "Initial commit of AWAF Policy"}'
+PAYLOAD=$(printf "$JSON_FMT" "$CONTENT")
+curl -X 'POST' \
+  "http://localhost:3000/api/v1/repos/gitea/awaf/contents/waf_policy.json" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: token $TOKEN" \
+  -d "$PAYLOAD"
+sudo ip route add ${PREFIX} via ${GATEWAY}

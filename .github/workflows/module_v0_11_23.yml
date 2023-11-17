@@ -1,4 +1,4 @@
-name: F5XC EC2 module v0.11.23
+name: F5XC AWS EC2 module v0.11.23
 on: workflow_dispatch
 jobs:
   ec2-module-validate:

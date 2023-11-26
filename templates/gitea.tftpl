@@ -55,7 +55,9 @@ sudo chmod 640 /etc/gitea/app.ini
 sudo chmod 770 /var/lib/gitea/custom/conf/app.ini
 sudo wget https://raw.githubusercontent.com/go-gitea/gitea/main/contrib/systemd/gitea.service -P /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now gitea
-sleep 5
+sleep 30
+systemctl status gitea.service
+journalctl -xe
 ps ax | grep gitea
 sudo -u git gitea admin user create --username gitea --password ${GITEA_PASSWORD} --email gitea@example.com -c /var/lib/gitea/custom/conf/app.ini
 sudo -u git gitea generate secret INTERNAL_TOKEN -c /var/lib/gitea/custom/conf/app.ini
